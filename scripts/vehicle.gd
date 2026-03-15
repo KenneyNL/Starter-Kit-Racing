@@ -1,29 +1,28 @@
-extends Node3D
+class_name Vehicle extends Node3D
 
-# Nodes
+@export_category("Nodes")
+@export var sphere: RigidBody3D
+@export var raycast: RayCast3D
 
-@onready var sphere: RigidBody3D = $Sphere
-@onready var raycast: RayCast3D = $Ground
+@export_category("Vehicle Elements")
+@export var vehicle_model: Node3D
+@export var vehicle_body: Node3D
 
-# Vehicle elements
+@export_group("Wheels")
+@export var wheel_fl: MeshInstance3D
+@export var wheel_fr: MeshInstance3D
+@export var wheel_bl: MeshInstance3D
+@export var wheel_br: MeshInstance3D
 
-@onready var vehicle_model = $Container
-@onready var vehicle_body = $Container/Model/body
+@export_category("FX")
+@export_group("Particles")
+@export var trail_left: GPUParticles3D
+@export var trail_right: GPUParticles3D
 
-@onready var wheel_fl = $"Container/Model/wheel-front-left"
-@onready var wheel_fr = $"Container/Model/wheel-front-right"
-@onready var wheel_bl = $"Container/Model/wheel-back-left"
-@onready var wheel_br = $"Container/Model/wheel-back-right"
+@export_group("Audio")
+@export var screech_sound: AudioStreamPlayer3D
+@export var engine_sound: AudioStreamPlayer3D
 
-# Effects
-
-@onready var trail_left: GPUParticles3D = $Container/TrailLeft
-@onready var trail_right: GPUParticles3D = $Container/TrailRight
-
-# Sounds
-
-@onready var screech_sound: AudioStreamPlayer3D = $Container/ScreechSound
-@onready var engine_sound: AudioStreamPlayer3D = $Container/EngineSound
 
 var input: Vector3
 var normal: Vector3
@@ -34,11 +33,16 @@ var linear_speed: float
 
 var colliding: bool
 
-# Functions
+# Public Functions
+
+func get_vehicle_pos() -> Vector3:
+	return vehicle_model.global_position
+
+# Private Functions
 
 func _physics_process(delta):
 	
-	handle_input(delta)
+	_handle_input(delta)
 	
 	var direction = sign(linear_speed)
 	if direction == 0: direction = sign(input.z) if abs(input.z) > 0.1 else 1
@@ -62,7 +66,7 @@ func _physics_process(delta):
 		# Orient model to colliding normal
 		
 		if normal.dot(vehicle_model.global_basis.y) > 0.5:
-			var xform = align_with_y(vehicle_model.global_transform, normal)
+			var xform = _align_with_y(vehicle_model.global_transform, normal)
 			vehicle_model.global_transform = vehicle_model.global_transform.interpolate_with(xform, 0.2).orthonormalized()
 	
 	colliding = raycast.is_colliding()
@@ -86,14 +90,14 @@ func _physics_process(delta):
 	
 	# Visual and audio effects
 	
-	effect_engine(delta)
-	effect_body(delta)
-	effect_wheels(delta)
-	effect_trails()
+	_effect_engine(delta)
+	_effect_body(delta)
+	_effect_wheels(delta)
+	_effect_trails()
 
 # Handle input when vehicle is colliding with ground
 
-func handle_input(delta):
+func _handle_input(delta):
 	
 	if raycast.is_colliding():
 		input.x = Input.get_axis("left", "right")
@@ -101,7 +105,7 @@ func handle_input(delta):
 	
 	sphere.angular_velocity += vehicle_model.get_global_transform().basis.x * (linear_speed * 100) * delta
 
-func effect_body(delta):
+func _effect_body(delta):
 	
 	# Slightly tilt body based on acceleration and steering
 	
@@ -112,7 +116,9 @@ func effect_body(delta):
 	
 	vehicle_body.position = vehicle_body.position.lerp(Vector3(0, 0.2, 0), delta * 5)
 
-func effect_wheels(delta):
+# Spin and rotate wheels (based on direction)
+
+func _effect_wheels(delta):
 	
 	# Rotate wheels based on acceleration
 	
@@ -126,7 +132,7 @@ func effect_wheels(delta):
 
 # Engine sounds
 
-func effect_engine(delta):
+func _effect_engine(delta):
 	
 	var speed_factor = clamp(abs(linear_speed), 0.0, 1.0)
 	var throttle_factor = clamp(abs(input.z), 0.0, 1.0)
@@ -141,7 +147,7 @@ func effect_engine(delta):
 
 # Show trails (and play skid sound)
 
-func effect_trails():
+func _effect_trails():
 	
 	var drift_intensity = abs(linear_speed - acceleration) + (abs(vehicle_body.rotation.z) * 2.0)
 	var should_emit = drift_intensity > 0.25
@@ -157,7 +163,7 @@ func effect_trails():
 
 # Align vehicle with normal
 
-func align_with_y(xform, new_y):
+func _align_with_y(xform, new_y):
 	
 	xform.basis.y = new_y
 	xform.basis.x = -xform.basis.z.cross(new_y)
