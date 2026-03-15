@@ -105,12 +105,14 @@ func _handle_input(delta):
 	
 	sphere.angular_velocity += vehicle_model.get_global_transform().basis.x * (linear_speed * 100) * delta
 
-# Rotate and tilt body depending on acceleration and steering
-
 func _effect_body(delta):
+	
+	# Slightly tilt body based on acceleration and steering
 	
 	vehicle_body.rotation.x = lerp_angle(vehicle_body.rotation.x, -(linear_speed - acceleration) / 6, delta * 10)
 	vehicle_body.rotation.z = lerp_angle(vehicle_body.rotation.z, -input.x / 5 * linear_speed, delta * 5)
+	
+	# Change the body position so wheels don't clip through the body when tilting
 	
 	vehicle_body.position = vehicle_body.position.lerp(Vector3(0, 0.2, 0), delta * 5)
 
@@ -118,8 +120,12 @@ func _effect_body(delta):
 
 func _effect_wheels(delta):
 	
+	# Rotate wheels based on acceleration
+	
 	for wheel in [wheel_fl, wheel_fr, wheel_bl, wheel_br]:
 		wheel.rotation.x += acceleration
+	
+	# Rotate front wheels based on steering direction
 	
 	wheel_fl.rotation.y = lerp_angle(wheel_fl.rotation.y, -input.x / 1.5, delta * 10)
 	wheel_fr.rotation.y = lerp_angle(wheel_fr.rotation.y, -input.x / 1.5, delta * 10)
