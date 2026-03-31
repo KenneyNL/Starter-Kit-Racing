@@ -45,7 +45,7 @@ Follow the same steps as seen above but make sure your model has the following c
 
 - `wheel-back-right` The back right wheel of the vehicle
 
-### 4. How to change from a car to a motorcycle?
+#### 4. How to change from a car to a motorcycle?
 
 Remove the 'Vehicle' node from the main scene. Find the 'vehicle-motorcycle.tscn' scene and place it in your main scene, make sure to adjust the 'View' node to target the new vehicle.
 
