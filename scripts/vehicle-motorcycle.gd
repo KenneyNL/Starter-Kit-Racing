@@ -1,6 +1,6 @@
 extends Vehicle
 
-@onready var motorcycle = $"Container/Model/motorcycle"
+@onready var motorcycle = $"Container/Model"
 @onready var fork = $"Container/Model/motorcycle/body/fork"
 
 @onready var wheel_front = $"Container/Model/motorcycle/wheel-front"
