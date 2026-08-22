@@ -6,6 +6,7 @@
 [ext_resource type="AudioStream" uid="uid://2in1jtv5bh0y" path="res://audio/skid.ogg" id="4_moxos"]
 [ext_resource type="AudioStream" uid="uid://oentynl734ox" path="res://audio/engine-motorcycle.ogg" id="5_deusc"]
 [ext_resource type="AudioStream" uid="uid://io4pmr3lo1dy" path="res://audio/impact.ogg" id="6_mll1c"]
+[ext_resource type="PackedScene" uid="uid://dyigra5crnov4" path="res://scenes/antenna.tscn" id="7_vmjf8"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tfk12"]
 transparency = 1
@@ -70,6 +71,9 @@ debug_shape_custom_color = Color(0.898039, 0, 0, 1)
 [node name="Container" type="Node3D" parent="." unique_id=546976745]
 
 [node name="Model" parent="Container" unique_id=1374897151 instance=ExtResource("2_deusc")]
+
+[node name="Antenna" parent="Container/Model" unique_id=585176449 instance=ExtResource("7_vmjf8")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.379591, -0.3690573)
 
 [node name="TrailLeft" type="GPUParticles3D" parent="Container" unique_id=1350774766]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, -0.2)
