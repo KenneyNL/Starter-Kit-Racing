@@ -1,10 +1,10 @@
-[gd_scene load_steps=17 format=4 uid="uid://cfqye5yx4hl1j"]
+[gd_scene format=4 uid="uid://cfqye5yx4hl1j"]
 
 [ext_resource type="PackedScene" uid="uid://dffh13ujx0tmi" path="res://models/decoration-empty.glb" id="1_8k04h"]
 [ext_resource type="PackedScene" uid="uid://dnonb1wl5fs0h" path="res://models/decoration-forest.glb" id="2_dlvak"]
 [ext_resource type="PackedScene" uid="uid://ch83y7b822ibm" path="res://models/decoration-tents.glb" id="3_6wkmy"]
+[ext_resource type="PackedScene" uid="uid://dhw4owib5q8o7" path="res://models/tofu_shop.glb" id="5_oxy43"]
 [ext_resource type="Texture2D" uid="uid://cn1tfklahvwc0" path="res://models/Textures/colormap.png" id="5_qst2b"]
-[ext_resource type="PackedScene" uid="uid://dhc1lsb41pv6p" path="res://models/track-ramp.glb" id="7_0c7ya"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_vqi4y"]
 resource_name = "colormap"
@@ -132,46 +132,48 @@ _surfaces = [{
 blend_shape_mode = 0
 shadow_mesh = SubResource("ArrayMesh_yn5hr")
 
-[node name="Mesh-library" type="Node3D"]
+[node name="Mesh-library" type="Node3D" unique_id=692065290]
 
-[node name="decoration-empty" parent="." instance=ExtResource("1_8k04h")]
+[node name="decoration-empty" parent="." unique_id=953981273 instance=ExtResource("1_8k04h")]
 visible = false
 
-[node name="decoration-forest" parent="." instance=ExtResource("2_dlvak")]
+[node name="decoration-forest" parent="." unique_id=1538273695 instance=ExtResource("2_dlvak")]
 visible = false
 
-[node name="decoration-tents" parent="." instance=ExtResource("3_6wkmy")]
+[node name="decoration-tents" parent="." unique_id=1220884665 instance=ExtResource("3_6wkmy")]
 visible = false
 
-[node name="track-corner" type="MeshInstance3D" parent="."]
+[node name="track-corner" type="MeshInstance3D" parent="." unique_id=1686433777]
 visible = false
 mesh = SubResource("ArrayMesh_fjrti")
 skeleton = NodePath("")
 
-[node name="collision" type="StaticBody3D" parent="track-corner"]
+[node name="collision" type="StaticBody3D" parent="track-corner" unique_id=1255928432]
 
-[node name="collision-shape" type="CollisionShape3D" parent="track-corner/collision"]
+[node name="collision-shape" type="CollisionShape3D" parent="track-corner/collision" unique_id=672979445]
 shape = SubResource("ConcavePolygonShape3D_ftcqc")
 
-[node name="track-finish" type="MeshInstance3D" parent="."]
+[node name="track-finish" type="MeshInstance3D" parent="." unique_id=1343849796]
 visible = false
 mesh = SubResource("ArrayMesh_glc7t")
 skeleton = NodePath("")
 
-[node name="collision" type="StaticBody3D" parent="track-finish"]
+[node name="collision" type="StaticBody3D" parent="track-finish" unique_id=701302660]
 
-[node name="collision-shape" type="CollisionShape3D" parent="track-finish/collision"]
+[node name="collision-shape" type="CollisionShape3D" parent="track-finish/collision" unique_id=1751608190]
 shape = SubResource("ConcavePolygonShape3D_oxy43")
 
-[node name="track-ramp" parent="." instance=ExtResource("7_0c7ya")]
+[node name="track-ramp" parent="." unique_id=442832819]
 visible = false
 
-[node name="track-straight" type="MeshInstance3D" parent="."]
+[node name="track-straight" type="MeshInstance3D" parent="." unique_id=630195929]
 visible = false
 mesh = SubResource("ArrayMesh_xukl4")
 skeleton = NodePath("")
 
-[node name="collision" type="StaticBody3D" parent="track-straight"]
+[node name="collision" type="StaticBody3D" parent="track-straight" unique_id=1269380819]
 
-[node name="collision-shape" type="CollisionShape3D" parent="track-straight/collision"]
+[node name="collision-shape" type="CollisionShape3D" parent="track-straight/collision" unique_id=1953426445]
 shape = SubResource("ConcavePolygonShape3D_oxy43")
+
+[node name="tofu_shop" parent="." unique_id=329738812 instance=ExtResource("5_oxy43")]
