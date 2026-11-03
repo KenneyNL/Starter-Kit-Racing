@@ -41,6 +41,9 @@ var current_steer_angle: float = 0.0
 @onready var engine_sound: AudioStreamPlayer3D = $Container/EngineSound
 @onready var impact_sound: AudioStreamPlayer3D = $Container/ImpactSound
 
+## Moltiplica la spinta del veicolo (1.0 = velocita' originale). Lo imposta ogni mappa.
+@export var speed_multiplier: float = 1.0
+
 var input: Vector3
 var normal: Vector3
 
@@ -115,7 +118,7 @@ func _physics_process(delta):
 		else:
 			linear_speed = lerp(linear_speed, target_speed, delta * 6)
 
-	acceleration = lerpf(acceleration, linear_speed + (abs(sphere.angular_velocity.length() * linear_speed) / 100), delta * 1)
+	acceleration = lerpf(acceleration, linear_speed + (abs(sphere.angular_velocity.length() * linear_speed) / (100 * speed_multiplier)), delta * 1)
 
 	# Match vehicle model to physics sphere
 
@@ -142,7 +145,7 @@ func handle_input(delta):
 		input.x = Input.get_axis("left", "right")
 		input.z = Input.get_axis("back", "forward")
 
-	sphere.angular_velocity += vehicle_model.get_global_transform().basis.x * (linear_speed * 100) * delta
+	sphere.angular_velocity += vehicle_model.get_global_transform().basis.x * (linear_speed * 100 * speed_multiplier) * delta
 
 func effect_body(delta):
 	

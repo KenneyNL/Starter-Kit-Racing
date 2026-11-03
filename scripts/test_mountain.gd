@@ -1,26 +1,42 @@
 extends Node3D
 
-# Scena di prova: salita con tornanti generata da codice.
+# Mappa di montagna di prova: la strada segue il Path3D "RoadPath" (modificabile nell'editor).
+# Il primo punto del Path3D e' la partenza, l'ultimo il traguardo.
 # Non usa main.tscn ne' la GridMap. Tasto R = ricomincia.
 
 const MountainRoad := preload("res://scripts/mountain_road.gd")
 const VEHICLE_SCENE := preload("res://scenes/vehicle.tscn")
 const VIEW_SCRIPT := preload("res://scripts/view.gd")
 const ENVIRONMENT := preload("res://scenes/main-environment.tres")
+const DRIFT_BAR := preload("res://scenes/drift_bar.tscn")
+const RACE_SUMMARY := preload("res://scripts/race_summary.gd")
 
-@export var start_index: int = 3
+## Velocita' del veicolo su questa mappa (1.0 = quella delle mappe a tile).
+@export var speed_multiplier: float = 1.5
+## Distanza dalla partenza (metri lungo la strada) a cui parte l'auto.
+@export var spawn_distance: float = 4.0
 @export var log_interval: float = 0.5
+
+@onready var path: Path3D = $RoadPath
 
 var road: MountainRoad
 var vehicle: Vehicle
+var race_time: float = 0.0
+var racing: bool = true
+var drift_bar: DriftBar
+## Secondi passati con n segmenti pieni sulla Drift Bar (n = 0 .. DriftBar.SEGMENTS).
+var bar_time: PackedFloat32Array = PackedFloat32Array()
 var log_timer: float = 0.0
 
 
 func _ready() -> void:
+	bar_time.resize(DriftBar.SEGMENTS + 1)
 	_make_world()
 	road = MountainRoad.new()
 	road.name = "MountainRoad"
+	road.path = path
 	add_child(road)
+	road.finish_reached.connect(_on_finish_reached)
 	road.build()
 	_make_vehicle_and_camera()
 
@@ -61,12 +77,23 @@ func _make_world() -> void:
 
 
 func _make_vehicle_and_camera() -> void:
-	var start := road.centerline[start_index]
-
-	# l'auto, a rotazione zero, guarda verso +Z: la strada di prova parte in quella direzione
+	# l'auto parte sulla strada, poco dopo la linea di partenza, orientata come il percorso
+	var idx := clampi(int(spawn_distance / road.step_length), 0, road.centerline.size() - 1)
 	vehicle = VEHICLE_SCENE.instantiate()
-	vehicle.position = start + Vector3(0.0, 0.2, 0.0)
+	vehicle.speed_multiplier = speed_multiplier
+	vehicle.position = road.centerline[idx] + Vector3(0.0, 0.2, 0.0)
+	vehicle.rotation = road.basis_at(idx).get_euler()
 	add_child(vehicle)
+
+	# HUD: stessa Drift Bar di main.tscn, agganciata al veicolo
+	var hud := CanvasLayer.new()
+	hud.name = "HUD"
+	add_child(hud)
+	var bar := DRIFT_BAR.instantiate() as DriftBar
+	bar.name = "DriftBar"
+	bar.target = vehicle
+	hud.add_child(bar)
+	drift_bar = bar
 
 	# stessa inquadratura di main.tscn (yaw 45, pitch -35), ma far piu' lontano
 	var view := Node3D.new()
@@ -85,6 +112,20 @@ func _make_vehicle_and_camera() -> void:
 	cam.current = true
 
 
+func _on_finish_reached(_body: Node3D) -> void:
+	racing = false
+	print("[Traguardo] tempo %.2f s | secondi per numero di barre: %s" % [race_time, str(bar_time)])
+	var summary = RACE_SUMMARY.new()
+	summary.name = "RaceSummary"
+	add_child(summary)
+	summary.show_results(race_time, bar_time)
+
+
+func _process(delta: float) -> void:
+	if racing and drift_bar != null:
+		bar_time[clampi(drift_bar.filled_segments, 0, DriftBar.SEGMENTS)] += delta
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_R:
 		get_tree().reload_current_scene()
@@ -93,11 +134,13 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if vehicle == null:
 		return
+	if racing:
+		race_time += delta
 	log_timer += delta
 	if log_timer < log_interval:
 		return
 	log_timer = 0.0
 	var tilt := rad_to_deg(vehicle.vehicle_model.global_basis.y.angle_to(Vector3.UP))
 	var real_speed := vehicle.sphere.linear_velocity.length()
-	print("inclinazione %4.1f gradi | quota %5.1f m | v reale %5.1f m/s | linear_speed %.2f | drift %s" % [
-		tilt, vehicle.sphere.global_position.y, real_speed, vehicle.linear_speed, vehicle.is_drifting])
+	print("t %5.1f s | inclinazione %4.1f gradi | quota %5.1f m | v reale %5.1f m/s | drift %s" % [
+		race_time, tilt, vehicle.sphere.global_position.y, real_speed, vehicle.is_drifting])
