@@ -16,6 +16,9 @@ signal finish_reached(body: Node3D)
 @export_group("Strada")
 @export var road_width: float = 6.0
 @export var road_lift: float = 0.03
+## Di quanto l'asfalto visibile sta sotto la superficie fisica su cui rotola l'auto.
+## 0.12 e' la differenza che c'e' nelle mappe a tile (ruote a filo dell'asfalto).
+@export var asphalt_drop: float = 0.12
 @export var rail_height: float = 0.9
 @export var rail_offset: float = 0.4
 @export var rail_thickness: float = 0.25
@@ -175,7 +178,7 @@ func _quad(st: SurfaceTool, p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, 
 	_tri(st, p0, p2, p3, facing, col, col, col)
 
 
-func _add_mesh_body(mesh: ArrayMesh, node_name: String, friction: float) -> void:
+func _add_visual(mesh: ArrayMesh, node_name: String) -> void:
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
 	mat.roughness = 0.9
@@ -186,6 +189,8 @@ func _add_mesh_body(mesh: ArrayMesh, node_name: String, friction: float) -> void
 	mi.material_override = mat
 	add_child(mi)
 
+
+func _add_collider(mesh: ArrayMesh, node_name: String, friction: float) -> void:
 	var body := StaticBody3D.new()
 	body.name = node_name + "Body"
 	var pm := PhysicsMaterial.new()
@@ -197,6 +202,11 @@ func _add_mesh_body(mesh: ArrayMesh, node_name: String, friction: float) -> void
 	cs.shape = shape
 	body.add_child(cs)
 	add_child(body)
+
+
+func _add_mesh_body(mesh: ArrayMesh, node_name: String, friction: float) -> void:
+	_add_visual(mesh, node_name)
+	_add_collider(mesh, node_name, friction)
 
 
 func _build_terrain() -> void:
@@ -279,40 +289,56 @@ func _build_terrain() -> void:
 
 
 func _build_road() -> void:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var hw := road_width * 0.5
 	var n := centerline.size()
+	# l/r: bordi dell'asfalto VISIBILE; pl/pr: bordi della superficie FISICA (collider)
+	var vis := Vector3(0.0, road_lift - asphalt_drop, 0.0)
+	var phys := Vector3(0.0, road_lift, 0.0)
 	var l := PackedVector3Array()
 	var r := PackedVector3Array()
+	var pl := PackedVector3Array()
+	var pr := PackedVector3Array()
 	for i in n:
-		var c := centerline[i] + Vector3(0.0, road_lift, 0.0)
 		var s := _side(i)
-		l.append(c - s * hw)
-		r.append(c + s * hw)
+		l.append(centerline[i] + vis - s * hw)
+		r.append(centerline[i] + vis + s * hw)
+		pl.append(centerline[i] + phys - s * hw)
+		pr.append(centerline[i] + phys + s * hw)
 	var down := Vector3(0.0, -0.5, 0.0)
+
+	var asphalt := SurfaceTool.new()
+	asphalt.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var marks := SurfaceTool.new()
+	marks.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var flat := SurfaceTool.new()
+	flat.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in n - 1:
 		var s := _side(i)
-		_quad(st, l[i], l[i + 1], r[i + 1], r[i], Vector3.UP, asphalt_color)
-		_quad(st, l[i], l[i + 1], l[i + 1] + down, l[i] + down, -s, asphalt_color)
-		_quad(st, r[i], r[i + 1], r[i + 1] + down, r[i] + down, s, asphalt_color)
+		_quad(asphalt, l[i], l[i + 1], r[i + 1], r[i], Vector3.UP, asphalt_color)
+		_quad(asphalt, l[i], l[i + 1], l[i + 1] + down, l[i] + down, -s, asphalt_color)
+		_quad(asphalt, r[i], r[i + 1], r[i + 1] + down, r[i] + down, s, asphalt_color)
+		_quad(flat, pl[i], pl[i + 1], pr[i + 1], pr[i], Vector3.UP, asphalt_color)
 		if i % 8 < 4:
-			# linea di mezzeria tratteggiata
+			# linea di mezzeria tratteggiata (solo visiva, niente collider: niente gradini)
 			var lift := Vector3(0.0, 0.02, 0.0)
-			var a := centerline[i] + Vector3(0.0, road_lift, 0.0) + lift
-			var b := centerline[i + 1] + Vector3(0.0, road_lift, 0.0) + lift
-			var m := _side(i) * 0.08
-			_quad(st, a - m, b - m, b + m, a + m, Vector3.UP, line_color)
+			var a := centerline[i] + vis + lift
+			var b := centerline[i + 1] + vis + lift
+			var m := s * 0.08
+			_quad(marks, a - m, b - m, b + m, a + m, Vector3.UP, line_color)
 	# partenza: striscia verde; traguardo: scacchiera
-	_checker(st, mini(1, n - 1), 0.8, 1, 1, Color(0.2, 0.75, 0.3), Color(0.2, 0.75, 0.3), 0.02)
-	_checker(st, maxi(n - 2, 0), 2.0, 8, 2, Color.WHITE, Color(0.08, 0.08, 0.08), 0.025)
-	st.generate_normals()
-	_add_mesh_body(st.commit(), "Road", road_friction)
+	_checker(marks, mini(1, n - 1), 0.8, 1, 1, Color(0.2, 0.75, 0.3), Color(0.2, 0.75, 0.3), 0.02)
+	_checker(marks, maxi(n - 2, 0), 2.0, 8, 2, Color.WHITE, Color(0.08, 0.08, 0.08), 0.025)
+	asphalt.generate_normals()
+	marks.generate_normals()
+	flat.generate_normals()
+	_add_visual(asphalt.commit(), "Road")
+	_add_visual(marks.commit(), "RoadMarks")
+	_add_collider(flat.commit(), "Road", road_friction)
 
 
 # Griglia di celle (cols x rows) sulla carreggiata, centrata nel campione i e lunga "length" metri.
 func _checker(st: SurfaceTool, i: int, length: float, cols: int, rows: int, col_a: Color, col_b: Color, lift: float) -> void:
-	var c0 := centerline[i] + Vector3(0.0, road_lift + lift, 0.0)
+	var c0 := centerline[i] + Vector3(0.0, road_lift - asphalt_drop + lift, 0.0)
 	var t := (centerline[mini(i + 1, centerline.size() - 1)] - centerline[maxi(i - 1, 0)]).normalized()
 	var s := _side(i)
 	var hw := road_width * 0.5

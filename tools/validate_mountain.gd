@@ -66,6 +66,7 @@ func _physics_process(delta: float) -> bool:
 		out_time = t
 	if finish_time >= 0.0 or t > DURATION or out_time >= 0.0:
 		print("=== RISULTATO ===")
+		print("riepilogo a schermo: %s | secondi per barra: %s" % [str(scene.get_node_or_null("RaceSummary") != null), str(scene.bar_time)])
 		print("traguardo: %s | tempo %.1f s | progresso %d/%d campioni (%.0f%%) | quota max %.1f m | scostamento max dal centro %.1f m | v reale media %.1f min %.1f | caduto: %s" % [
 			("RAGGIUNTO a %.1f s" % finish_time) if finish_time >= 0.0 else "NO", t, best_idx, cl.size() - 1, 100.0 * best_idx / (cl.size() - 1), max_y, max_off, sum_real / maxf(samples, 1), min_real, str(out_time >= 0.0)])
 		quit()

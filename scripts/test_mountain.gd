@@ -9,6 +9,7 @@ const VEHICLE_SCENE := preload("res://scenes/vehicle.tscn")
 const VIEW_SCRIPT := preload("res://scripts/view.gd")
 const ENVIRONMENT := preload("res://scenes/main-environment.tres")
 const DRIFT_BAR := preload("res://scenes/drift_bar.tscn")
+const RACE_SUMMARY := preload("res://scripts/race_summary.gd")
 
 ## Velocita' del veicolo su questa mappa (1.0 = quella delle mappe a tile).
 @export var speed_multiplier: float = 1.5
@@ -22,10 +23,14 @@ var road: MountainRoad
 var vehicle: Vehicle
 var race_time: float = 0.0
 var racing: bool = true
+var drift_bar: DriftBar
+## Secondi passati con n segmenti pieni sulla Drift Bar (n = 0 .. DriftBar.SEGMENTS).
+var bar_time: PackedFloat32Array = PackedFloat32Array()
 var log_timer: float = 0.0
 
 
 func _ready() -> void:
+	bar_time.resize(DriftBar.SEGMENTS + 1)
 	_make_world()
 	road = MountainRoad.new()
 	road.name = "MountainRoad"
@@ -84,10 +89,11 @@ func _make_vehicle_and_camera() -> void:
 	var hud := CanvasLayer.new()
 	hud.name = "HUD"
 	add_child(hud)
-	var bar := DRIFT_BAR.instantiate()
+	var bar := DRIFT_BAR.instantiate() as DriftBar
 	bar.name = "DriftBar"
-	bar.set("target", vehicle)
+	bar.target = vehicle
 	hud.add_child(bar)
+	drift_bar = bar
 
 	# stessa inquadratura di main.tscn (yaw 45, pitch -35), ma far piu' lontano
 	var view := Node3D.new()
@@ -108,7 +114,16 @@ func _make_vehicle_and_camera() -> void:
 
 func _on_finish_reached(_body: Node3D) -> void:
 	racing = false
-	print("[Traguardo] tempo %.2f s" % race_time)
+	print("[Traguardo] tempo %.2f s | secondi per numero di barre: %s" % [race_time, str(bar_time)])
+	var summary = RACE_SUMMARY.new()
+	summary.name = "RaceSummary"
+	add_child(summary)
+	summary.show_results(race_time, bar_time)
+
+
+func _process(delta: float) -> void:
+	if racing and drift_bar != null:
+		bar_time[clampi(drift_bar.filled_segments, 0, DriftBar.SEGMENTS)] += delta
 
 
 func _unhandled_input(event: InputEvent) -> void:
