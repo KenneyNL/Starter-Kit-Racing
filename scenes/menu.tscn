@@ -1,10 +1,12 @@
-[gd_scene load_steps=6 format=3 uid="uid://bwhj8l6g6p0om"]
+[gd_scene load_steps=7 format=3 uid="uid://bwhj8l6g6p0om"]
 
 [ext_resource type="Texture2D" uid="uid://byqqbebrbr4l2" path="res://splash-screen.png" id="1_bg"]
 [ext_resource type="Texture2D" path="res://assets/ui/button_normal.png" id="3_btn_normal"]
 [ext_resource type="Texture2D" path="res://assets/ui/button_active.png" id="4_btn_active"]
 [ext_resource type="Texture2D" path="res://assets/ui/cursor_h.png" id="5_cursor"]
 [ext_resource type="Script" path="res://scripts/menu.gd" id="2_menu"]
+[ext_resource type="AudioStream" path="res://ost/Dejavu-remix-_menù-edit_.ogg" id="6_bgm"]
+[ext_resource type="FontFile" uid="uid://cab84co7pij3f" path="res://assets/kenney_ui-pack-space-expansion/Font/Kenney Future Narrow.ttf" id="7_font"]
 
 [sub_resource type="StyleBoxTexture" id="1_style_normal"]
 texture = ExtResource("3_btn_normal")
@@ -134,4 +136,30 @@ theme_override_colors/font_color_pressed = Color(0, 0, 0, 1)
 [connection signal="pressed" from="Center/MainMenu/OptionButton" to="." method="_on_option_pressed"]
 [connection signal="pressed" from="Center/TrackSelectMenu/CircuitButton" to="." method="_on_circuit_pressed"]
 [connection signal="pressed" from="Center/TrackSelectMenu/MountainButton" to="." method="_on_mountain_pressed"]
+[node name="BGM" type="AudioStreamPlayer" parent="."]
+unique_name_in_owner = true
+stream = ExtResource("6_bgm")
+volume_db = -8.0
+autoplay = true
+
+[node name="NowPlayingLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -600.0
+offset_top = -50.0
+offset_right = -24.0
+offset_bottom = -20.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_fonts/font = ExtResource("7_font")
+theme_override_font_sizes/font_size = 18
+horizontal_alignment = 2
+vertical_alignment = 2
+
 [connection signal="pressed" from="Center/TrackSelectMenu/BackButton" to="." method="_on_back_pressed"]

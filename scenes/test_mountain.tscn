@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://c5vu7gj0yr1c"]
 
 [ext_resource type="Script" uid="uid://df8hlkut0ys3d" path="res://scripts/test_mountain.gd" id="1_test"]
+[ext_resource type="AudioStream" uid="uid://dv2alvyf7h8yl" path="res://ost/Dejavu-Kaze.ogg" id="2_ost"]
 
 [sub_resource type="Curve3D" id="Curve3D_gxy27"]
 _data = {
@@ -14,3 +15,8 @@ script = ExtResource("1_test")
 
 [node name="RoadPath" type="Path3D" parent="." unique_id=1978003504]
 curve = SubResource("Curve3D_gxy27")
+
+[node name="BGM" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("2_ost")
+volume_db = -10.0
+autoplay = true
