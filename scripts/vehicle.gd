@@ -7,7 +7,7 @@ class_name Vehicle extends Node3D
 
 # Vehicle elements
 
-@onready var vehicle_model = $Container
+@onready var vehicle_model: Node3D = $Container
 @onready var vehicle_body = get_node_or_null("Container/Model/body")
 
 # Wheels (from vehicle-toyota-ae86.glb sub-nodes)
@@ -55,6 +55,8 @@ var colliding: bool
 
 # True while the drift smoke is being emitted (read by the Drift Bar HUD)
 var is_drifting: bool = false
+## Slip angle in degrees between heading and motion direction on the vehicle's plane
+var drift_angle: float = 0.0
 
 var linear_velocity: Vector3
 var prev_position: Vector3
@@ -209,6 +211,20 @@ func effect_engine(delta):
 # Show trails (and play skid sound)
 
 func effect_trails():
+
+	# Calculate slip angle on the vehicle's local plane
+	# The vehicle's forward orientation in this model is +Z (see tools/validate_mountain.gd:54)
+	var forward_dir: Vector3 = vehicle_model.global_basis.z
+	var normal_up: Vector3 = vehicle_model.global_basis.y
+	var vel_on_plane: Vector3 = linear_velocity - normal_up * linear_velocity.dot(normal_up)
+	var speed: float = vel_on_plane.length()
+	if speed > 1.5:
+		# If going in reverse (linear_speed < 0), heading is -forward_dir
+		var drive_dir: Vector3 = forward_dir if linear_speed >= 0 else -forward_dir
+		var dot_val: float = clampf(drive_dir.dot(vel_on_plane.normalized()), -1.0, 1.0)
+		drift_angle = rad_to_deg(acos(dot_val))
+	else:
+		drift_angle = 0.0
 
 	var drift_intensity = abs(linear_speed - acceleration) + (abs(calculated_lean) * 2.0)
 	var should_emit = drift_intensity > 0.25

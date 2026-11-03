@@ -1,19 +1,24 @@
 class_name DriftBar extends MarginContainer
 
 # HUD bar shown at the top-center of the screen: a glass panel with a label and
-# SEGMENTS cells that fill up (grey -> blue) while the vehicle keeps drifting.
+# SEGMENTS cells that reflect the vehicle's instantaneous drift / slip angle.
 #
-# Drift = the smoke trail is being emitted (Vehicle.is_drifting).
-#  - smoke shown      -> counter grows, 1 segment every `seconds_per_segment`
-#  - smoke not shown  -> counter freezes, after `reset_delay` seconds it resets to 0
-#  - smoke back before the reset -> counter resumes from where it was
+# Drift angle thresholds for the 6 segments (in degrees):
+#  1 segment:  >= 10 deg
+#  2 segments: >= 16 deg
+#  3 segments: >= 22 deg
+#  4 segments: >= 28 deg
+#  5 segments: >= 35 deg
+#  6 segments: >= 42 deg
 
 const SEGMENTS := 6
 
+const THRESHOLDS: Array[float] = [10.0, 16.0, 22.0, 28.0, 35.0, 42.0]
+
 @export_group("Properties")
 @export var target: Vehicle
-@export var seconds_per_segment: float = 1.0
-@export var reset_delay: float = 2.0
+## Seconds to hold segments before stepping down (smoother visual readout)
+@export var decay_delay: float = 0.25
 
 @export_group("Look")
 @export var top_margin: int = 24
@@ -34,11 +39,9 @@ const SEGMENTS := 6
 @export var label_font_size: int = 20
 @export var label_color: Color = Color(0.2, 0.24, 0.35)
 
-var drift_time: float = 0.0   # seconds of drift accumulated
-var idle_time: float = 0.0    # seconds since the smoke stopped
-
 var segments: Array[TextureRect] = []
 var filled_segments: int = -1
+var decay_timer: float = 0.0
 
 func _ready():
 
@@ -98,25 +101,32 @@ func _process(delta):
 
 	if target == null: return
 
-	if target.is_drifting:
-		drift_time += delta
-		idle_time = 0.0
-	elif drift_time > 0.0:
-		idle_time += delta
-		if idle_time >= reset_delay:
-			drift_time = 0.0
-			idle_time = 0.0
+	# Determine instant segments from target's drift_angle
+	var angle: float = target.drift_angle
+	var target_filled := 0
+	for i in SEGMENTS:
+		if angle >= THRESHOLDS[i]:
+			target_filled = i + 1
+		else:
+			break
 
-	var filled := mini(int(drift_time / seconds_per_segment), SEGMENTS)
-
-	if filled != filled_segments:
-		_update_segments(filled)
+	if target_filled >= filled_segments:
+		# Instant rise
+		decay_timer = decay_delay
+		if target_filled != filled_segments:
+			_update_segments(target_filled)
+	else:
+		# Gentle step-down decay for pleasant UI responsiveness
+		decay_timer -= delta
+		if decay_timer <= 0.0:
+			decay_timer = 0.08
+			_update_segments(filled_segments - 1)
 
 # Show the first `filled` segments as "on", the others as "off"
 
 func _update_segments(filled: int):
 
-	filled_segments = filled
+	filled_segments = clampi(filled, 0, SEGMENTS)
 
 	for i in SEGMENTS:
-		segments[i].texture = segment_on_texture if i < filled else segment_off_texture
+		segments[i].texture = segment_on_texture if i < filled_segments else segment_off_texture
