@@ -28,6 +28,9 @@ This package includes a basic template for a racing game in Godot 4.6. Includes 
 
 <p align="center"><img src="screenshots/screenshot.png"/></p>
 
+<p align="center"><img src="screenshots/screenshot_track_select.png"/></p>
+
+
 ### Controls
 
 | Key | Command |
