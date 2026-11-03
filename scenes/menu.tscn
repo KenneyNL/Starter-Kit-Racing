@@ -1,4 +1,4 @@
-[gd_scene load_steps=6]
+[gd_scene load_steps=6 format=3 uid="uid://bwhj8l6g6p0om"]
 
 [ext_resource type="Texture2D" uid="uid://byqqbebrbr4l2" path="res://splash-screen.png" id="1_bg"]
 [ext_resource type="Texture2D" path="res://assets/ui/button_normal.png" id="3_btn_normal"]
@@ -57,15 +57,17 @@ anchor_bottom = 0.5
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Buttons" type="VBoxContainer" parent="Center"]
+[node name="MainMenu" type="VBoxContainer" parent="Center"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="NewGameButton" type="Button" parent="Center/Buttons"]
+[node name="SinglePlayerButton" type="Button" parent="Center/MainMenu"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 64)
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
-text = "NEW GAME"
+text = "SINGLE PLAYER"
 theme_override_styles/normal = SubResource("1_style_normal")
 theme_override_styles/hover = SubResource("2_style_hover")
 theme_override_styles/pressed = SubResource("3_style_pressed")
@@ -73,7 +75,7 @@ theme_override_colors/font_color = Color(0, 0, 0, 1)
 theme_override_colors/font_color_hover = Color(0, 0, 0, 1)
 theme_override_colors/font_color_pressed = Color(0, 0, 0, 1)
 
-[node name="OptionButton" type="Button" parent="Center/Buttons"]
+[node name="OptionButton" type="Button" parent="Center/MainMenu"]
 custom_minimum_size = Vector2(320, 64)
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
@@ -85,5 +87,51 @@ theme_override_colors/font_color = Color(0, 0, 0, 1)
 theme_override_colors/font_color_hover = Color(0, 0, 0, 1)
 theme_override_colors/font_color_pressed = Color(0, 0, 0, 1)
 
-[connection signal="pressed" from="Center/Buttons/NewGameButton" to="." method="_on_new_game_pressed"]
-[connection signal="pressed" from="Center/Buttons/OptionButton" to="." method="_on_option_pressed"]
+[node name="TrackSelectMenu" type="VBoxContainer" parent="Center"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="CircuitButton" type="Button" parent="Center/TrackSelectMenu"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "CIRCUIT"
+theme_override_styles/normal = SubResource("1_style_normal")
+theme_override_styles/hover = SubResource("2_style_hover")
+theme_override_styles/pressed = SubResource("3_style_pressed")
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_color_hover = Color(0, 0, 0, 1)
+theme_override_colors/font_color_pressed = Color(0, 0, 0, 1)
+
+[node name="MountainButton" type="Button" parent="Center/TrackSelectMenu"]
+custom_minimum_size = Vector2(320, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "MOUNTAIN"
+theme_override_styles/normal = SubResource("1_style_normal")
+theme_override_styles/hover = SubResource("2_style_hover")
+theme_override_styles/pressed = SubResource("3_style_pressed")
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_color_hover = Color(0, 0, 0, 1)
+theme_override_colors/font_color_pressed = Color(0, 0, 0, 1)
+
+[node name="BackButton" type="Button" parent="Center/TrackSelectMenu"]
+custom_minimum_size = Vector2(320, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "BACK"
+theme_override_styles/normal = SubResource("1_style_normal")
+theme_override_styles/hover = SubResource("2_style_hover")
+theme_override_styles/pressed = SubResource("3_style_pressed")
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_color_hover = Color(0, 0, 0, 1)
+theme_override_colors/font_color_pressed = Color(0, 0, 0, 1)
+
+[connection signal="pressed" from="Center/MainMenu/SinglePlayerButton" to="." method="_on_single_player_pressed"]
+[connection signal="pressed" from="Center/MainMenu/OptionButton" to="." method="_on_option_pressed"]
+[connection signal="pressed" from="Center/TrackSelectMenu/CircuitButton" to="." method="_on_circuit_pressed"]
+[connection signal="pressed" from="Center/TrackSelectMenu/MountainButton" to="." method="_on_mountain_pressed"]
+[connection signal="pressed" from="Center/TrackSelectMenu/BackButton" to="." method="_on_back_pressed"]
