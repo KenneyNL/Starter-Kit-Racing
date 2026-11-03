@@ -13,7 +13,9 @@ var min_real := 99.0
 var samples := 0
 var sum_real := 0.0
 var out_time := -1.0
-const DURATION := 75.0
+var finish_time := -1.0
+var connected := false
+const DURATION := 90.0
 
 func _initialize() -> void:
 	scene = load("res://scenes/test_mountain.tscn").instantiate()
@@ -26,6 +28,9 @@ func _physics_process(delta: float) -> bool:
 	var road = scene.road
 	if v == null or road == null:
 		return false
+	if not connected:
+		connected = true
+		road.finish_reached.connect(func(_b): finish_time = t)
 	var pos: Vector3 = v.sphere.global_position
 	var cl: PackedVector3Array = road.centerline
 	# indice del campione piu' vicino
@@ -59,9 +64,9 @@ func _physics_process(delta: float) -> bool:
 		Input.action_press("left", s)
 	if pos.y < -3.0 and out_time < 0.0:
 		out_time = t
-	if bi >= cl.size() - 3 or t > DURATION or out_time >= 0.0:
+	if finish_time >= 0.0 or t > DURATION or out_time >= 0.0:
 		print("=== RISULTATO ===")
-		print("tempo %.1f s | progresso %d/%d campioni (%.0f%%) | quota max %.1f m | scostamento max dal centro %.1f m | v reale media %.1f min %.1f | caduto: %s" % [
-			t, best_idx, cl.size() - 1, 100.0 * best_idx / (cl.size() - 1), max_y, max_off, sum_real / maxf(samples, 1), min_real, str(out_time >= 0.0)])
+		print("traguardo: %s | tempo %.1f s | progresso %d/%d campioni (%.0f%%) | quota max %.1f m | scostamento max dal centro %.1f m | v reale media %.1f min %.1f | caduto: %s" % [
+			("RAGGIUNTO a %.1f s" % finish_time) if finish_time >= 0.0 else "NO", t, best_idx, cl.size() - 1, 100.0 * best_idx / (cl.size() - 1), max_y, max_off, sum_real / maxf(samples, 1), min_real, str(out_time >= 0.0)])
 		quit()
 	return false

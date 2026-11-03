@@ -5,6 +5,14 @@ extends Node3D
 # procedurale); se e' vuota viene creata una salita di prova con tornanti.
 # Convenzione: l'auto a rotazione zero guarda verso +Z, quindi il percorso parte verso +Z.
 
+## Emesso una sola volta quando il veicolo (la sfera) attraversa il traguardo.
+signal finish_reached(body: Node3D)
+
+@export_group("Percorso")
+## Se assegnato, la linea centrale viene letta da questo Path3D (solo a runtime):
+## il primo punto e' la partenza, l'ultimo il traguardo.
+@export var path: Path3D
+
 @export_group("Strada")
 @export var road_width: float = 6.0
 @export var road_lift: float = 0.03
@@ -40,18 +48,68 @@ extends Node3D
 @export var rail_color := Color(0.8, 0.8, 0.82)
 
 var centerline: PackedVector3Array = PackedVector3Array()
+## Posizione e orientamento (asse +Z = direzione di marcia) del primo e dell'ultimo punto,
+## nello spazio locale di questo nodo.
+var start_transform := Transform3D.IDENTITY
+var finish_transform := Transform3D.IDENTITY
+var _finished := false
 
 
 func build() -> void:
 	var t0 := Time.get_ticks_msec()
-	if centerline.is_empty():
+	_finished = false
+	if path != null:
+		centerline = _centerline_from_path()
+	if centerline.size() < 2:
 		centerline = make_test_centerline()
 	for c in get_children():
 		c.queue_free()
+	var last := centerline.size() - 1
+	start_transform = Transform3D(basis_at(0), centerline[0])
+	finish_transform = Transform3D(basis_at(last), centerline[last])
 	_build_terrain()
 	_build_road()
 	_build_rails()
+	_build_finish_area()
 	print("[MountainRoad] %d campioni, costruita in %d ms" % [centerline.size(), Time.get_ticks_msec() - t0])
+	_print_stats()
+
+
+# Legge la curva del Path3D (solo a runtime) e la campiona ogni step_length metri.
+func _centerline_from_path() -> PackedVector3Array:
+	var out := PackedVector3Array()
+	if path.curve == null or path.curve.point_count < 2:
+		push_warning("MountainRoad: il Path3D ha meno di 2 punti, uso il percorso di prova")
+		return out
+	var c: Curve3D = path.curve.duplicate()
+	c.bake_interval = step_length
+	var to_local := global_transform.affine_inverse() * path.global_transform
+	for p in c.get_baked_points():
+		var q := to_local * p
+		if out.is_empty() or q.distance_to(out[out.size() - 1]) > 0.5:
+			out.append(q)
+	return out
+
+
+# Orientamento nel campione i: l'asse +Z locale guarda nella direzione di marcia
+# (l'auto, a rotazione zero, guarda verso +Z).
+func basis_at(i: int) -> Basis:
+	var a := centerline[maxi(i - 1, 0)]
+	var b := centerline[mini(i + 1, centerline.size() - 1)]
+	return Basis(Vector3.UP, atan2(b.x - a.x, b.z - a.z))
+
+
+func _print_stats() -> void:
+	var length := 0.0
+	var max_grade := 0.0
+	for i in range(1, centerline.size()):
+		length += Vector2(centerline[i].x - centerline[i - 1].x, centerline[i].z - centerline[i - 1].z).length()
+	for i in range(0, centerline.size() - 3):
+		var run := Vector2(centerline[i + 3].x - centerline[i].x, centerline[i + 3].z - centerline[i].z).length()
+		if run > 0.1:
+			max_grade = maxf(max_grade, absf(centerline[i + 3].y - centerline[i].y) / run)
+	print("[MountainRoad] percorso: %.2f km, dislivello %.0f m, pendenza max %.0f%%" % [
+		length / 1000.0, centerline[centerline.size() - 1].y - centerline[0].y, max_grade * 100.0])
 
 
 # Percorso di prova: tratto piano, poi salita con tornanti alternati.
@@ -245,8 +303,51 @@ func _build_road() -> void:
 			var b := centerline[i + 1] + Vector3(0.0, road_lift, 0.0) + lift
 			var m := _side(i) * 0.08
 			_quad(st, a - m, b - m, b + m, a + m, Vector3.UP, line_color)
+	# partenza: striscia verde; traguardo: scacchiera
+	_checker(st, mini(1, n - 1), 0.8, 1, 1, Color(0.2, 0.75, 0.3), Color(0.2, 0.75, 0.3), 0.02)
+	_checker(st, maxi(n - 2, 0), 2.0, 8, 2, Color.WHITE, Color(0.08, 0.08, 0.08), 0.025)
 	st.generate_normals()
 	_add_mesh_body(st.commit(), "Road", road_friction)
+
+
+# Griglia di celle (cols x rows) sulla carreggiata, centrata nel campione i e lunga "length" metri.
+func _checker(st: SurfaceTool, i: int, length: float, cols: int, rows: int, col_a: Color, col_b: Color, lift: float) -> void:
+	var c0 := centerline[i] + Vector3(0.0, road_lift + lift, 0.0)
+	var t := (centerline[mini(i + 1, centerline.size() - 1)] - centerline[maxi(i - 1, 0)]).normalized()
+	var s := _side(i)
+	var hw := road_width * 0.5
+	for r in rows:
+		var a0 := -length * 0.5 + length * float(r) / float(rows)
+		var a1 := -length * 0.5 + length * float(r + 1) / float(rows)
+		for k in cols:
+			var l0 := -hw + road_width * float(k) / float(cols)
+			var l1 := -hw + road_width * float(k + 1) / float(cols)
+			var col := col_a if (r + k) % 2 == 0 else col_b
+			_quad(st, c0 + t * a0 + s * l0, c0 + t * a1 + s * l0, c0 + t * a1 + s * l1, c0 + t * a0 + s * l1, Vector3.UP, col)
+
+
+# Zona invisibile sul traguardo: rileva la sfera del veicolo (layer 4 = valore 8).
+func _build_finish_area() -> void:
+	var i := maxi(centerline.size() - 2, 0)
+	var area := Area3D.new()
+	area.name = "FinishArea"
+	area.collision_layer = 0
+	area.collision_mask = 8
+	area.transform = Transform3D(basis_at(i), centerline[i] + Vector3(0.0, 2.0, 0.0))
+	var cs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(road_width + 2.0, 4.0, 1.0)
+	cs.shape = box
+	area.add_child(cs)
+	area.body_entered.connect(_on_finish_body_entered)
+	add_child(area)
+
+
+func _on_finish_body_entered(body: Node3D) -> void:
+	if _finished or not (body is RigidBody3D):
+		return
+	_finished = true
+	finish_reached.emit(body)
 
 
 func _build_rails() -> void:
