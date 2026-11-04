@@ -10,12 +10,27 @@ const VIEW_SCRIPT := preload("res://scripts/view.gd")
 const ENVIRONMENT := preload("res://scenes/main-environment.tres")
 const DRIFT_BAR := preload("res://scenes/drift_bar.tscn")
 const RACE_SUMMARY := preload("res://scripts/race_summary.gd")
+const NOW_PLAYING_BANNER := preload("res://scenes/now_playing_banner.tscn")
 
 ## Velocita' del veicolo su questa mappa (1.0 = quella delle mappe a tile).
 @export var speed_multiplier: float = 1.5
 ## Distanza dalla partenza (metri lungo la strada) a cui parte l'auto.
 @export var spawn_distance: float = 4.0
 @export var log_interval: float = 0.5
+
+@export_group("Vegetation")
+## Alberi e cespugli lungo la strada.
+@export var enable_vegetation: bool = true
+## Tentativi di piazzamento per metro quadro (piu' alto = piu' alberi, ma ne restano meno di quelli tentati).
+@export_range(0.0, 0.05, 0.001) var tree_density: float = 0.008
+## Distanza minima degli alberi dal centro strada (metri).
+@export var min_tree_road_distance: float = 6.0
+## Distanza minima tra alberi vicini (metri).
+@export var min_tree_spacing: float = 3.5
+## Pendenza massima del terreno per piazzare alberi (1.0 = 45 gradi).
+@export_range(0.0, 1.0, 0.05) var max_tree_slope: float = 0.8
+## Cambiando il seed cambia la disposizione degli alberi.
+@export var vegetation_seed: int = 12345
 
 @onready var path: Path3D = $RoadPath
 
@@ -36,6 +51,12 @@ func _ready() -> void:
 	road.name = "MountainRoad"
 	road.path = path
 	add_child(road)
+	road.enable_vegetation = enable_vegetation
+	road.tree_density = tree_density
+	road.min_tree_road_distance = min_tree_road_distance
+	road.min_tree_spacing = min_tree_spacing
+	road.max_tree_slope = max_tree_slope
+	road.vegetation_seed = vegetation_seed
 	road.finish_reached.connect(_on_finish_reached)
 	road.build()
 	_make_vehicle_and_camera()
@@ -94,6 +115,11 @@ func _make_vehicle_and_camera() -> void:
 	bar.target = vehicle
 	hud.add_child(bar)
 	drift_bar = bar
+
+	# banner "Now Playing" come in main.tscn: legge il titolo dal nodo BGM
+	var banner := NOW_PLAYING_BANNER.instantiate() as NowPlayingBanner
+	banner.audio_player_path = NodePath("../../BGM")
+	hud.add_child(banner)
 
 	# stessa inquadratura di main.tscn (yaw 45, pitch -35), ma far piu' lontano
 	var view := Node3D.new()
