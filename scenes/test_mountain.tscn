@@ -17,6 +17,7 @@ script = ExtResource("1_test")
 curve = SubResource("Curve3D_gxy27")
 
 [node name="BGM" type="AudioStreamPlayer" parent="."]
+process_mode = 3
 stream = ExtResource("2_ost")
 volume_db = -10.0
 autoplay = true

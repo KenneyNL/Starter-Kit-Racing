@@ -53,6 +53,8 @@ signal finish_reached(body: Node3D)
 @export_group("Vegetazione")
 ## Se abilitata, popola la montagna con alberi e vegetazione
 @export var enable_vegetation: bool = true
+## Seed del generatore casuale: stesso seed = stessa disposizione degli alberi.
+@export var vegetation_seed: int = 12345
 ## Densita' degli alberi (numero di tentativi di spawn per metro quadro)
 @export var tree_density: float = 0.008
 ## Distanza minima degli alberi dal centro strada (metri)
@@ -509,7 +511,7 @@ func _build_vegetation() -> void:
 	var placed_trees := {} # key: Vector2i -> Array of Vector2
 	
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 12345
+	rng.seed = vegetation_seed
 	
 	# StaticBody per collisioni dei tronchi principali (vicini alla strada)
 	var coll_body := StaticBody3D.new()
