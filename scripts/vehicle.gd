@@ -44,7 +44,18 @@ var current_steer_angle: float = 0.0
 ## Moltiplica la spinta del veicolo (1.0 = velocita' originale). Lo imposta ogni mappa.
 @export var speed_multiplier: float = 1.0
 
+@export_group("Body collision")
+## Fa collidere con muri e ostacoli anche il corpo dell'auto, non solo la sfera di fisica.
+## Senza, cofano e coda (1,1 m oltre la sfera) attraversano i muri.
+@export var body_collision: bool = true
+## Layer fisici considerati ostacoli per il corpo dell'auto (1 = mondo statico).
+@export_flags_3d_physics var body_collision_mask: int = 1
+## Distanza lasciata tra il corpo e il muro (metri).
+@export var body_collision_margin: float = 0.02
+
 var input: Vector3
+var _body_probes: Array[Vector3] = []
+var _body_probes_ready: bool = false
 var normal: Vector3
 
 var acceleration: float
@@ -122,6 +133,9 @@ func _physics_process(delta):
 
 	acceleration = lerpf(acceleration, linear_speed + (abs(sphere.angular_velocity.length() * linear_speed) / (100 * speed_multiplier)), delta * 1)
 
+	if body_collision:
+		_resolve_body_overlap()
+
 	# Match vehicle model to physics sphere
 
 	vehicle_model.position = sphere.position - Vector3(0, 0.65, 0)
@@ -138,6 +152,71 @@ func _physics_process(delta):
 	effect_body(delta)
 	effect_wheels(delta)
 	effect_trails()
+
+# Body collision
+# La fisica usa solo la sfera (raggio 0.5) sotto l'auto, ma il corpo e' lungo oltre 3 m.
+# Da ogni punto del perimetro del corpo si lancia un raggio dal centro della sfera: se un muro
+# sta tra il centro e quel punto, il punto e' "dentro" il muro e la sfera viene spostata indietro.
+# Il raggio parte dal lato libero, quindi anche con muri sottili non spinge mai attraverso.
+
+func _compute_body_probes():
+	_body_probes_ready = true
+	_body_probes.clear()
+	var minp := Vector3(INF, INF, INF)
+	var maxp := Vector3(-INF, -INF, -INF)
+	var inv: Transform3D = vehicle_model.global_transform.affine_inverse()
+	for mi in vehicle_model.find_children("*", "MeshInstance3D", true, false):
+		if mi.mesh == null:
+			continue
+		for surface in mi.mesh.get_surface_count():
+			var verts: PackedVector3Array = mi.mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX]
+			var xf: Transform3D = inv * mi.global_transform
+			for v in verts:
+				var q: Vector3 = xf * v
+				minp = minp.min(q)
+				maxp = maxp.max(q)
+	if minp.x == INF:
+		return
+	var cx := (minp.x + maxp.x) * 0.5
+	for p in [
+			Vector3(minp.x, 0, minp.z), Vector3(maxp.x, 0, minp.z),
+			Vector3(minp.x, 0, maxp.z), Vector3(maxp.x, 0, maxp.z),
+			Vector3(cx, 0, maxp.z), Vector3(cx, 0, minp.z),
+			Vector3(minp.x, 0, 0), Vector3(maxp.x, 0, 0)]:
+		_body_probes.append(p)
+
+func _resolve_body_overlap():
+	if !_body_probes_ready:
+		_compute_body_probes()
+	if _body_probes.is_empty():
+		return
+
+	var space := get_world_3d().direct_space_state
+	var center := sphere.global_position
+	var model_basis := vehicle_model.global_basis
+	var worst_depth := 0.0
+	var worst_normal := Vector3.ZERO
+
+	for p in _body_probes:
+		var target := center + model_basis * p
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(center, target, body_collision_mask))
+		if hit.is_empty():
+			continue
+		var n: Vector3 = hit.normal
+		if n.dot(target - center) > 0.0:
+			n = -n # facce a senso unico: la normale deve guardare verso il centro della sfera
+		if absf(n.y) > 0.6:
+			continue # suolo e pendii: li gestisce la sfera
+		var depth: float = (hit.position - target).dot(n)
+		if depth > worst_depth:
+			worst_depth = depth
+			worst_normal = n
+
+	if worst_depth > 0.0:
+		sphere.global_position += worst_normal * (worst_depth + body_collision_margin)
+		var into_wall := sphere.linear_velocity.dot(worst_normal)
+		if into_wall < 0.0:
+			sphere.linear_velocity -= worst_normal * into_wall
 
 # Handle input when vehicle is colliding with ground
 

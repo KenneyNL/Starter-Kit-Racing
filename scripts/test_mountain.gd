@@ -14,6 +14,8 @@ const NOW_PLAYING_BANNER := preload("res://scenes/now_playing_banner.tscn")
 
 ## Velocita' del veicolo su questa mappa (1.0 = quella delle mappe a tile).
 @export var speed_multiplier: float = 1.5
+## Fa collidere con muri e alberi anche cofano e coda dell'auto (non solo la sfera di fisica).
+@export var body_collision: bool = true
 ## Distanza dalla partenza (metri lungo la strada) a cui parte l'auto.
 @export var spawn_distance: float = 4.0
 @export var log_interval: float = 0.5
@@ -102,6 +104,7 @@ func _make_vehicle_and_camera() -> void:
 	var idx := clampi(int(spawn_distance / road.step_length), 0, road.centerline.size() - 1)
 	vehicle = VEHICLE_SCENE.instantiate()
 	vehicle.speed_multiplier = speed_multiplier
+	vehicle.body_collision = body_collision
 	vehicle.position = road.centerline[idx] + Vector3(0.0, 0.2, 0.0)
 	vehicle.rotation = road.basis_at(idx).get_euler()
 	add_child(vehicle)
