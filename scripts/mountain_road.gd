@@ -8,6 +8,9 @@ extends Node3D
 ## Emesso una sola volta quando il veicolo (la sfera) attraversa il traguardo.
 signal finish_reached(body: Node3D)
 
+## Modello del tile traguardo delle mappe a tile: da qui si estrae solo l'arco.
+const GATE_SCENE := preload("res://models/track-finish.glb")
+
 @export_group("Percorso")
 ## Se assegnato, la linea centrale viene letta da questo Path3D (solo a runtime):
 ## il primo punto e' la partenza, l'ultimo il traguardo.
@@ -43,6 +46,24 @@ signal finish_reached(body: Node3D)
 @export var straight_grade: float = 0.08
 @export var turn_grade: float = 0.05
 
+@export_group("Arco partenza/arrivo")
+## Piazza l'arco di track-finish sulla partenza e sul traguardo.
+@export var enable_gates: bool = true
+## Scala dell'arco (1.0 = dimensioni del tile originale: luce interna 10 m, alto 7 m).
+@export var gate_scale: float = 1.0
+## Di quanto i piedi dell'arco affondano sotto l'asfalto, per non farli "volare" sui pendii.
+@export var gate_sink: float = 0.4
+
+@export_group("Piazzali partenza/arrivo")
+## Piazzale di cemento (stile parcheggio) dietro la partenza e oltre il traguardo.
+@export var enable_lots: bool = true
+## Lato del piazzale quadrato (metri).
+@export var lot_size: float = 32.0
+## Spessore visibile del bordo del piazzale sotto il piano (metri).
+@export var lot_skirt: float = 3.0
+@export var lot_color := Color(0.62, 0.62, 0.60)
+@export var lot_line_color := Color(0.92, 0.92, 0.88)
+
 @export_group("Aspetto")
 @export var asphalt_color := Color(0.25, 0.26, 0.28)
 @export var line_color := Color(0.9, 0.9, 0.85)
@@ -72,6 +93,8 @@ var centerline: PackedVector3Array = PackedVector3Array()
 var start_transform := Transform3D.IDENTITY
 var finish_transform := Transform3D.IDENTITY
 var _finished := false
+## Piazzali: origine (punto della strada), dir (verso l'esterno), side (laterale).
+var _lots: Array[Dictionary] = []
 
 # Cache del terreno per la vegetazione
 var _terrain_min_p := Vector2.ZERO
@@ -93,10 +116,14 @@ func build() -> void:
 	var last := centerline.size() - 1
 	start_transform = Transform3D(basis_at(0), centerline[0])
 	finish_transform = Transform3D(basis_at(last), centerline[last])
+	_setup_lots()
 	_build_terrain()
 	_build_road()
+	_build_lots()
 	_build_rails()
 	_build_finish_area()
+	if enable_gates:
+		_build_gates()
 	if enable_vegetation:
 		_build_vegetation()
 	print("[MountainRoad] %d campioni, costruita in %d ms" % [centerline.size(), Time.get_ticks_msec() - t0])
@@ -280,7 +307,19 @@ func _build_terrain() -> void:
 					hsum += w * (ys[i] - fall_slope * maxf(0.0, di - edge))
 				var skirt := maxf(hsum / wsum, 0.0)
 				h = lerpf(road_h, skirt, smoothstep(edge, edge + blend_width, d))
-			heights[iz * nx + ix] = maxf(h, 0.0) if d > edge else h
+			var hh := maxf(h, 0.0) if d > edge else h
+			for lot in _lots:
+				# piazzale piano; fuori dal bordo il terreno scende con fall_slope (come ai lati
+				# della strada) invece di precipitare, poi si raccorda al terreno naturale
+				var od := _lot_outside_distance(lot, p.x, p.y)
+				if od < blend_width * 3.0:
+					var pad_h: float = lot["origin"].y - bed_depth
+					var line := pad_h - fall_slope * od
+					var outer := hh
+					if hh < line:
+						outer = lerpf(line, hh, smoothstep(0.0, blend_width * 3.0, od))
+					hh = lerpf(pad_h, outer, smoothstep(0.0, blend_width, od))
+			heights[iz * nx + ix] = hh
 
 	# vertici e colori (erba -> roccia in base alla pendenza)
 	var verts := PackedVector3Array()
@@ -404,6 +443,184 @@ func _on_finish_body_entered(body: Node3D) -> void:
 		return
 	_finished = true
 	finish_reached.emit(body)
+
+
+# Archi di partenza e arrivo: stessa posizione delle strisce (partenza campione 1, traguardo
+# penultimo campione). Il modello e' largo 14 m con i piedi a +-5..7 m dall'asse, quindi
+# sta fuori dai guardrail (che arrivano a ~3.7 m) e non serve nessun collider.
+func _build_gates() -> void:
+	var mesh := _make_gate_mesh()
+	if mesh == null:
+		return
+	var n := centerline.size()
+	_add_gate("StartGate", mini(1, n - 1), mesh)
+	_add_gate("FinishGate", maxi(n - 2, 0), mesh)
+
+
+func _add_gate(node_name: String, i: int, mesh: ArrayMesh) -> void:
+	var mi := MeshInstance3D.new()
+	mi.name = node_name
+	mi.mesh = mesh
+	var b := basis_at(i).scaled(Vector3.ONE * gate_scale)
+	mi.transform = Transform3D(b, centerline[i] + Vector3(0.0, road_lift - asphalt_drop - gate_sink, 0.0))
+	add_child(mi)
+
+
+# track-finish.glb e' un tile intero (strada 10x10 m + arco). Qui si tengono solo i triangoli
+# dell'arco, cosi' non compare il pezzo di strada piatta sopra la nostra strada in pendenza.
+func _make_gate_mesh() -> ArrayMesh:
+	var root := GATE_SCENE.instantiate()
+	var src: MeshInstance3D = root as MeshInstance3D
+	if src == null:
+		var found := root.find_children("*", "MeshInstance3D", true, false)
+		if not found.is_empty():
+			src = found[0] as MeshInstance3D
+	if src == null or src.mesh == null or src.mesh.get_surface_count() == 0:
+		push_warning("MountainRoad: nessuna mesh in track-finish.glb, archi non creati")
+		root.free()
+		return null
+	var arrays := src.mesh.surface_get_arrays(0)
+	var material := src.mesh.surface_get_material(0)
+	root.free()
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var kept := PackedInt32Array()
+	for t in range(0, idx.size() - 2, 3):
+		if _is_gate_triangle(verts[idx[t]], verts[idx[t + 1]], verts[idx[t + 2]]):
+			kept.append(idx[t])
+			kept.append(idx[t + 1])
+			kept.append(idx[t + 2])
+	if kept.is_empty():
+		push_warning("MountainRoad: filtro dell'arco senza triangoli, archi non creati")
+		return null
+	arrays[Mesh.ARRAY_INDEX] = kept
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.surface_set_material(0, material)
+	return mesh
+
+
+# L'arco occupa |z| <= 1.5 (il tile arriva a 5) e, nella fascia |x| <= 5, sta sopra 0.8 m
+# (l'asfalto del tile e' sotto 0.1 m, i bordi a 0.75 m). I piedi sono a |x| > 5.
+func _is_gate_triangle(a: Vector3, b: Vector3, c: Vector3) -> bool:
+	var max_z := maxf(absf(a.z), maxf(absf(b.z), absf(c.z)))
+	if max_z > 1.6:
+		return false
+	var max_x := maxf(absf(a.x), maxf(absf(b.x), absf(c.x)))
+	var max_y := maxf(a.y, maxf(b.y, c.y))
+	return max_x > 5.05 or max_y > 0.8
+
+
+# Piazzali quadrati: il bordo vicino alla strada passa dal primo/ultimo campione e il piazzale
+# si estende verso l'esterno (dietro la partenza, oltre il traguardo), centrato sull'asse.
+func _setup_lots() -> void:
+	_lots.clear()
+	if not enable_lots:
+		return
+	var last := centerline.size() - 1
+	for info in [["StartLot", 0, -1.0], ["FinishLot", last, 1.0]]:
+		var dir: Vector3 = basis_at(info[1]).z * float(info[2])
+		_lots.append({
+			"name": info[0],
+			"origin": centerline[info[1]],
+			"dir": dir,
+			"side": Vector3(-dir.z, 0.0, dir.x),
+		})
+
+
+# Distanza (in pianta) dal rettangolo del piazzale: 0 se il punto e' dentro.
+func _lot_outside_distance(lot: Dictionary, x: float, z: float) -> float:
+	var o: Vector3 = lot["origin"]
+	var dir: Vector3 = lot["dir"]
+	var side: Vector3 = lot["side"]
+	var dx := x - o.x
+	var dz := z - o.z
+	var u := dx * dir.x + dz * dir.z
+	var v := dx * side.x + dz * side.z
+	var qu := maxf(maxf(-u, u - lot_size), 0.0)
+	var qv := maxf(absf(v) - lot_size * 0.5, 0.0)
+	return sqrt(qu * qu + qv * qv)
+
+
+func _near_lot(x: float, z: float, margin: float) -> bool:
+	for lot in _lots:
+		if _lot_outside_distance(lot, x, z) < margin:
+			return true
+	return false
+
+
+# Punto del piazzale: u metri verso l'esterno dalla strada, v metri di lato, quota y.
+func _lot_point(lot: Dictionary, u: float, v: float, y: float) -> Vector3:
+	var o: Vector3 = lot["origin"]
+	var dir: Vector3 = lot["dir"]
+	var side: Vector3 = lot["side"]
+	return Vector3(o.x + dir.x * u + side.x * v, y, o.z + dir.z * u + side.z * v)
+
+
+func _build_lots() -> void:
+	for lot in _lots:
+		_build_lot(lot)
+
+
+func _build_lot(lot: Dictionary) -> void:
+	var node_name: String = lot["name"]
+	var dir: Vector3 = lot["dir"]
+	var side: Vector3 = lot["side"]
+	var y0: float = lot["origin"].y
+	var yv := y0 + road_lift - asphalt_drop  # cemento visibile
+	var yp := y0 + road_lift                 # superficie fisica, come la strada
+	var h := lot_size * 0.5
+	var down := Vector3(0.0, -lot_skirt, 0.0)
+
+	var slab := SurfaceTool.new()
+	slab.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var c00 := _lot_point(lot, 0.0, -h, yv)
+	var c10 := _lot_point(lot, lot_size, -h, yv)
+	var c11 := _lot_point(lot, lot_size, h, yv)
+	var c01 := _lot_point(lot, 0.0, h, yv)
+	_quad(slab, c00, c10, c11, c01, Vector3.UP, lot_color)
+	_quad(slab, c00, c10, c10 + down, c00 + down, -side, lot_color)
+	_quad(slab, c01, c11, c11 + down, c01 + down, side, lot_color)
+	_quad(slab, c10, c11, c11 + down, c10 + down, dir, lot_color)
+	_quad(slab, c00, c01, c01 + down, c00 + down, -dir, lot_color)
+	slab.generate_normals()
+	_add_visual(slab.commit(), node_name)
+
+	# stalli: file lungo i due lati e lungo il lato opposto alla strada
+	var marks := SurfaceTool.new()
+	marks.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var ym := yv + 0.02
+	var stall := 5.0
+	var pitch := 3.0
+	var margin := 4.0
+	var rows := int(floor((lot_size - 2.0 * margin) / pitch))
+	for sgn: float in [-1.0, 1.0]:
+		for k in rows + 1:
+			var u := margin + float(k) * pitch
+			_lot_line(marks, lot, u, sgn * h, u, sgn * (h - stall), ym)
+	var cols := int(floor((lot_size - 2.0 * (stall + 1.0)) / pitch))
+	var v0 := -float(cols) * pitch * 0.5
+	for k in cols + 1:
+		var v := v0 + float(k) * pitch
+		_lot_line(marks, lot, lot_size, v, lot_size - stall, v, ym)
+	marks.generate_normals()
+	_add_visual(marks.commit(), node_name + "Marks")
+
+	# collider piatto alla quota fisica della strada (niente gradino all'ingresso)
+	var flat := SurfaceTool.new()
+	flat.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_quad(flat, _lot_point(lot, 0.0, -h, yp), _lot_point(lot, lot_size, -h, yp),
+		_lot_point(lot, lot_size, h, yp), _lot_point(lot, 0.0, h, yp), Vector3.UP, lot_color)
+	flat.generate_normals()
+	_add_collider(flat.commit(), node_name, road_friction)
+
+
+func _lot_line(st: SurfaceTool, lot: Dictionary, u0: float, v0: float, u1: float, v1: float, y: float) -> void:
+	var a := _lot_point(lot, u0, v0, y)
+	var b := _lot_point(lot, u1, v1, y)
+	var d := (b - a).normalized()
+	var m := Vector3(-d.z, 0.0, d.x) * 0.06
+	_quad(st, a - m, b - m, b + m, a + m, Vector3.UP, lot_line_color)
 
 
 func _build_rails() -> void:
@@ -533,6 +750,10 @@ func _build_vegetation() -> void:
 				if closest_d2 < min_road_d2:
 					break
 		if closest_d2 < min_road_d2:
+			continue
+		
+		# 1b. Niente alberi sui piazzali
+		if _near_lot(x, z, 3.0):
 			continue
 		
 		# 2. Quota e pendenza del terreno
