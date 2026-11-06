@@ -128,6 +128,20 @@ theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
 theme_override_colors/font_focus_color = Color(0, 0, 0, 1)
 theme_override_colors/font_hover_pressed_color = Color(0, 0, 0, 1)
 
+[node name="MountainNightButton" type="Button" parent="Center/TrackSelectMenu"]
+custom_minimum_size = Vector2(320, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "MOUNTAIN NIGHT"
+theme_override_styles/normal = SubResource("1_style_normal")
+theme_override_styles/hover = SubResource("2_style_hover")
+theme_override_styles/pressed = SubResource("3_style_pressed")
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_focus_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_pressed_color = Color(0, 0, 0, 1)
+
 [node name="BackButton" type="Button" parent="Center/TrackSelectMenu"]
 custom_minimum_size = Vector2(320, 64)
 layout_mode = 2
@@ -146,6 +160,7 @@ theme_override_colors/font_hover_pressed_color = Color(0, 0, 0, 1)
 [connection signal="pressed" from="Center/MainMenu/OptionButton" to="." method="_on_option_pressed"]
 [connection signal="pressed" from="Center/TrackSelectMenu/CircuitButton" to="." method="_on_circuit_pressed"]
 [connection signal="pressed" from="Center/TrackSelectMenu/MountainButton" to="." method="_on_mountain_pressed"]
+[connection signal="pressed" from="Center/TrackSelectMenu/MountainNightButton" to="." method="_on_mountain_night_pressed"]
 [node name="BGM" type="AudioStreamPlayer" parent="."]
 unique_name_in_owner = true
 stream = ExtResource("6_bgm")

@@ -61,6 +61,7 @@ func _ready() -> void:
 	road.vegetation_seed = vegetation_seed
 	road.finish_reached.connect(_on_finish_reached)
 	road.build()
+	_make_spectators()
 	_make_vehicle_and_camera()
 
 
@@ -97,6 +98,21 @@ func _make_world() -> void:
 	mi.mesh = plane
 	mi.position = Vector3(0.0, -0.1, 0.0)
 	add_child(mi)
+
+
+func _make_spectators() -> void:
+	var st := road.start_transform
+	var start_pos := st.origin
+	# Direzione della strada (avanti) e laterale
+	var road_dir := st.basis.z
+	var road_side := Vector3(-road_dir.z, 0.0, road_dir.x)
+	var specs := Spectators.new()
+	specs.name = "Spectators"
+	specs.count = 10
+	specs.spread_radius = 14.0
+	specs.min_road_distance = 4.0
+	add_child(specs)
+	specs.spawn(start_pos, road_dir, road_side)
 
 
 func _make_vehicle_and_camera() -> void:

@@ -1,0 +1,11 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/test_mountain.tscn" id="1_base"]
+[ext_resource type="Script" path="res://scripts/test_mountain_night.gd" id="2_night"]
+
+; Versione notturna di test_mountain.tscn: istanzia la scena originale (stesso Path3D,
+; quindi stessa strada) e cambia solo lo script radice. Se modifichi il percorso in
+; test_mountain.tscn, la versione notturna lo eredita.
+
+[node name="TestMountainNight" instance=ExtResource("1_base")]
+script = ExtResource("2_night")

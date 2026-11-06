@@ -53,6 +53,10 @@ func _on_mountain_pressed() -> void:
 	_start_track("res://scenes/test_mountain.tscn")
 
 
+func _on_mountain_night_pressed() -> void:
+	_start_track("res://scenes/test_mountain_night.tscn")
+
+
 func _start_track(scene_path: String) -> void:
 	if _is_transitioning:
 		return
