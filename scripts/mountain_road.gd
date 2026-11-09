@@ -87,6 +87,49 @@ const GATE_SCENE := preload("res://models/track-finish.glb")
 ## Texture colormap (usata per i modelli di vegetazione)
 @export var colormap_texture: Texture2D = preload("res://models/Textures/colormap.png")
 
+@export_group("Guardrail")
+## Sostituisce il muro pieno con un guardrail (barra a W + pali). Il collider resta quello
+## del muro: la fisica non cambia, cambia solo l'aspetto.
+@export var enable_guardrails: bool = true
+## Un palo ogni N campioni della linea centrale (con step_length 2 m: 2 = un palo ogni 4 m).
+@export var guard_post_every: int = 2
+## Un catarifrangente ogni N pali.
+@export var guard_reflector_every: int = 3
+## Emissione dei catarifrangenti (la mappa notturna la alza).
+@export var reflector_glow: float = 0.6
+@export var post_color := Color(0.42, 0.43, 0.46)
+
+@export_group("Nature Kit")
+## Alberi, rocce e vegetazione del Kenney Nature Kit, in aggiunta agli alberi gia' presenti.
+@export var enable_nature_kit: bool = true
+@export_dir var nature_kit_dir: String = "res://assets/kenney_nature-kit/Models/GLTF format"
+## Moltiplicatore della densita' di alberi e vegetazione del Nature Kit.
+@export var nature_density: float = 1.0
+@export var nature_seed: int = 777
+## Distanza minima dal centro strada per gli oggetti del Nature Kit (metri).
+@export var nk_min_road_distance: float = 5.5
+@export var nk_tree_spacing: float = 3.0
+## Profondita' della fascia di alberi ai lati della strada (metri, oltre il guardrail).
+@export var nk_tree_band: float = 22.0
+@export var nk_tree_chance: float = 0.8
+## I modelli del kit sono piccoli (un pino e' ~1.5 m): qui si ingrandiscono.
+@export var nk_tree_scale := Vector2(3.0, 5.5)
+## Il kit e' esportato con colori non naturali e "unlit": qui i materiali vengono rimappati
+## per nome con una palette da montagna (illuminata). Se false, restano quelli originali.
+@export var nk_recolor: bool = true
+## Rocce nell'interno dei tornanti.
+@export var enable_rocks: bool = true
+## Lunghezza di strada (metri) su cui si misura quanto si gira per riconoscere un tornante.
+@export var hairpin_window: float = 50.0
+## Un tratto conta come tornante se il suo raggio medio di curva e' sotto questo valore (metri).
+@export var hairpin_max_radius: float = 40.0
+## Probabilita' di una roccia per campione e per tentativo nei tornanti.
+@export var rock_chance: float = 0.5
+@export var rock_scale := Vector2(2.5, 4.5)
+## Ciuffi di vegetazione bassa per campione e per lato.
+@export var plant_per_sample: float = 3.0
+@export var plant_band: float = 10.0
+
 var centerline: PackedVector3Array = PackedVector3Array()
 ## Posizione e orientamento (asse +Z = direzione di marcia) del primo e dell'ultimo punto,
 ## nello spazio locale di questo nodo.
@@ -95,6 +138,10 @@ var finish_transform := Transform3D.IDENTITY
 var _finished := false
 ## Piazzali: origine (punto della strada), dir (verso l'esterno), side (laterale).
 var _lots: Array[Dictionary] = []
+
+# Griglia di spaziatura degli alberi (condivisa tra vegetazione originale e Nature Kit).
+var _veg_grid := {}
+var _nk_cache := {}
 
 # Cache del terreno per la vegetazione
 var _terrain_min_p := Vector2.ZERO
@@ -126,6 +173,8 @@ func build() -> void:
 		_build_gates()
 	if enable_vegetation:
 		_build_vegetation()
+	if enable_nature_kit:
+		_build_nature_kit()
 	print("[MountainRoad] %d campioni, costruita in %d ms" % [centerline.size(), Time.get_ticks_msec() - t0])
 	_print_stats()
 
@@ -650,7 +699,12 @@ func _build_rails() -> void:
 			_quad(st, p[1], p[2], q[2], q[1], Vector3.UP, rail_color)
 			_quad(st, p[2], p[3], q[3], q[2], s_out, rail_color)
 	st.generate_normals()
-	_add_mesh_body(st.commit(), "Rails", rail_friction)
+	if enable_guardrails:
+		# muro invisibile (stesso collider di prima) + guardrail solo visivo
+		_add_collider(st.commit(), "Rails", rail_friction)
+		_build_guardrail_visual()
+	else:
+		_add_mesh_body(st.commit(), "Rails", rail_friction)
 
 
 func _sample_terrain_height(x: float, z: float) -> float:
@@ -725,7 +779,8 @@ func _build_vegetation() -> void:
 	
 	# Griglia spaziale per evitare sovrapposizioni tra alberi
 	var grid_cell := min_tree_spacing
-	var placed_trees := {} # key: Vector2i -> Array of Vector2
+	_veg_grid.clear()
+	var placed_trees := _veg_grid # key: Vector2i -> Array of Vector2
 	
 	var rng := RandomNumberGenerator.new()
 	rng.seed = vegetation_seed
@@ -861,3 +916,363 @@ func _build_vegetation() -> void:
 	
 	add_child(veg_root)
 
+
+
+# --- Guardrail ----------------------------------------------------------------------
+# Barra a "W" su pali, al posto del muro pieno. Solo visivo: il muro (invisibile) resta
+# il collider, quindi la fisica e le prestazioni di guida non cambiano.
+func _build_guardrail_visual() -> void:
+	var beam := SurfaceTool.new()
+	beam.begin(Mesh.PRIMITIVE_TRIANGLES)
+	beam.set_smooth_group(-1)
+	var posts := SurfaceTool.new()
+	posts.begin(Mesh.PRIMITIVE_TRIANGLES)
+	posts.set_smooth_group(-1)
+	var refl := SurfaceTool.new()
+	refl.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := centerline.size()
+	var base := road_width * 0.5 + rail_offset  # faccia della barra rivolta alla strada
+	# profilo a W: x = distanza verso l'esterno, y = quota sopra la strada
+	var prof: Array[Vector2] = [
+		Vector2(0.0, 0.35), Vector2(0.07, 0.46), Vector2(0.0, 0.57),
+		Vector2(0.07, 0.68), Vector2(0.0, 0.80)]
+	var back_u := 0.10
+	var top_h := prof[prof.size() - 1].y
+	var bot_h := prof[0].y
+	var dark := rail_color.darkened(0.25)
+	var post_n := 0
+	for sgn: float in [-1.0, 1.0]:
+		var refl_col := Color(1.0, 0.95, 0.8) if sgn < 0.0 else Color(1.0, 0.55, 0.1)
+		for i in n - 1:
+			var s0 := _side(i) * sgn
+			var s1 := _side(i + 1) * sgn
+			var c0 := centerline[i]
+			var c1 := centerline[i + 1]
+			for k in prof.size() - 1:
+				var a := prof[k]
+				var b := prof[k + 1]
+				# normale del segmento di profilo, rivolta verso la strada (u negativo)
+				var nu := -(b.y - a.y)
+				var nh := b.x - a.x
+				var facing := s0 * nu + Vector3.UP * nh
+				_quad(beam,
+					c0 + s0 * (base + a.x) + Vector3.UP * a.y,
+					c1 + s1 * (base + a.x) + Vector3.UP * a.y,
+					c1 + s1 * (base + b.x) + Vector3.UP * b.y,
+					c0 + s0 * (base + b.x) + Vector3.UP * b.y,
+					facing, rail_color)
+			# bordo superiore, inferiore e retro
+			_quad(beam,
+				c0 + s0 * (base + 0.0) + Vector3.UP * top_h, c1 + s1 * (base + 0.0) + Vector3.UP * top_h,
+				c1 + s1 * (base + back_u) + Vector3.UP * top_h, c0 + s0 * (base + back_u) + Vector3.UP * top_h,
+				Vector3.UP, rail_color.lightened(0.1))
+			_quad(beam,
+				c0 + s0 * (base + 0.0) + Vector3.UP * bot_h, c1 + s1 * (base + 0.0) + Vector3.UP * bot_h,
+				c1 + s1 * (base + back_u) + Vector3.UP * bot_h, c0 + s0 * (base + back_u) + Vector3.UP * bot_h,
+				Vector3.DOWN, dark)
+			_quad(beam,
+				c0 + s0 * (base + back_u) + Vector3.UP * bot_h, c1 + s1 * (base + back_u) + Vector3.UP * bot_h,
+				c1 + s1 * (base + back_u) + Vector3.UP * top_h, c0 + s0 * (base + back_u) + Vector3.UP * top_h,
+				s0, dark)
+			if i % guard_post_every == 0:
+				var t := Vector3(_side(i).z, 0.0, -_side(i).x)  # direzione di marcia
+				var foot := c0 + s0 * (base + back_u + 0.07) + Vector3(0.0, -0.6, 0.0)
+				_add_box(posts, foot, t, s0, 0.12, 0.12, 0.6 + 0.86, post_color)
+				if post_n % guard_reflector_every == 0:
+					# catarifrangente sulla faccia anteriore, a meta' del tratto piu' esterno
+					var f := c0 + s0 * (base - 0.012) + Vector3.UP * 0.57
+					var ht := t * 0.09
+					var hv := Vector3.UP * 0.045
+					_quad(refl, f - ht - hv, f + ht - hv, f + ht + hv, f - ht + hv, -s0, refl_col)
+				post_n += 1
+	beam.generate_normals()
+	posts.generate_normals()
+	refl.generate_normals()
+	_add_visual(beam.commit(), "GuardrailBeam")
+	_add_visual(posts.commit(), "GuardrailPosts")
+	var rm := StandardMaterial3D.new()
+	rm.vertex_color_use_as_albedo = true
+	rm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	rm.emission_enabled = true
+	rm.emission = Color(1.0, 0.7, 0.35)
+	rm.emission_energy_multiplier = reflector_glow
+	var rmi := MeshInstance3D.new()
+	rmi.name = "GuardrailReflectors"
+	rmi.mesh = refl.commit()
+	rmi.material_override = rm
+	rmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(rmi)
+
+
+# Parallelepipedo con la base centrata in "bottom", lati lungo t (size_t) e s (size_s).
+func _add_box(st: SurfaceTool, bottom: Vector3, t: Vector3, s: Vector3, size_t: float, size_s: float, height: float, col: Color) -> void:
+	var ht := t * size_t * 0.5
+	var hs := s * size_s * 0.5
+	var up := Vector3(0.0, height, 0.0)
+	var c00 := bottom - ht - hs
+	var c10 := bottom + ht - hs
+	var c11 := bottom + ht + hs
+	var c01 := bottom - ht + hs
+	_quad(st, c00 + up, c10 + up, c11 + up, c01 + up, Vector3.UP, col)
+	_quad(st, c00, c10, c10 + up, c00 + up, -s, col)
+	_quad(st, c01, c11, c11 + up, c01 + up, s, col)
+	_quad(st, c10, c11, c11 + up, c10 + up, t, col)
+	_quad(st, c00, c01, c01 + up, c00 + up, -t, col)
+
+
+# --- Kenney Nature Kit ----------------------------------------------------------------
+# Modelli del kit (cartella GLTF). Hanno materiali a tinta unita incorporati e sono piccoli
+# (un pino ~1.5 m, una roccia 0.3-1 m): vengono ingranditi con i parametri *_scale.
+const NK_TREES: Array[String] = [
+	"tree_pineTallA", "tree_pineTallB", "tree_pineTallC", "tree_pineTallD",
+	"tree_pineDefaultA", "tree_pineDefaultB", "tree_pineRoundA", "tree_pineRoundB",
+	"tree_pineRoundC", "tree_pineSmallA", "tree_pineSmallB"]
+const NK_ROCKS: Array[String] = [
+	"rock_largeA", "rock_largeB", "rock_largeC", "rock_largeD", "rock_tallA", "rock_tallB",
+	"rock_tallC", "rock_tallD", "stone_largeA", "stone_largeB", "stone_tallA", "stone_tallB"]
+const NK_SMALL_ROCKS: Array[String] = [
+	"rock_smallA", "rock_smallB", "rock_smallC", "rock_smallD", "rock_smallE", "rock_smallFlatA",
+	"stone_smallA", "stone_smallB", "stone_smallC", "stone_smallFlatA"]
+const NK_BUSHES: Array[String] = [
+	"plant_bush", "plant_bushLarge", "plant_bushSmall", "plant_bushTriangle", "plant_bushLargeTriangle"]
+const NK_GRASS: Array[String] = [
+	"grass", "grass_large", "grass_leafs", "grass_leafsLarge", "plant_flatShort", "plant_flatTall"]
+const NK_FLOWERS: Array[String] = [
+	"flower_purpleA", "flower_purpleB", "flower_redA", "flower_redB", "flower_yellowA", "flower_yellowB"]
+const NK_DEBRIS: Array[String] = ["log", "log_large", "stump_old", "stump_round"]
+
+
+func _nk_mesh(model: String) -> Mesh:
+	if _nk_cache.has(model):
+		return _nk_cache[model]
+	var res := load("%s/%s.glb" % [nature_kit_dir, model])
+	var mesh: Mesh = null
+	if res is PackedScene:
+		var root: Node = (res as PackedScene).instantiate()
+		var found := root.find_children("*", "MeshInstance3D", true, false)
+		if not found.is_empty():
+			mesh = (found[0] as MeshInstance3D).mesh
+			if nk_recolor and mesh != null:
+				mesh = mesh.duplicate() as Mesh
+				for si in mesh.get_surface_count():
+					var old_mat := mesh.surface_get_material(si)
+					var old_name := old_mat.resource_name if old_mat != null else ""
+					mesh.surface_set_material(si, _nk_material(old_name, old_mat, model))
+		root.free()
+	if mesh == null:
+		push_warning("MountainRoad: modello Nature Kit non trovato: %s/%s.glb" % [nature_kit_dir, model])
+	_nk_cache[model] = mesh
+	return mesh
+
+
+# Palette da montagna per i materiali del kit (per nome del materiale originale).
+func _nk_material(mat_name: String, old_mat: Material, model: String) -> Material:
+	var key := mat_name + ("@rock" if model.begins_with("rock_") else "")
+	if _nk_cache.has("mat:" + key):
+		return _nk_cache["mat:" + key]
+	var col := Color(0.4, 0.4, 0.4)
+	match mat_name:
+		"leafsDark": col = Color(0.11, 0.29, 0.15)
+		"leafsGreen": col = Color(0.20, 0.42, 0.18)
+		"leafsFall": col = Color(0.72, 0.38, 0.14)
+		"grass": col = Color(0.30, 0.50, 0.22)
+		"woodBark", "woodBarkDark", "woodDark", "wood": col = Color(0.33, 0.23, 0.15)
+		"woodInner": col = Color(0.70, 0.55, 0.38)
+		"woodBirch": col = Color(0.84, 0.82, 0.76)
+		"dirt": col = rock_color if model.begins_with("rock_") else Color(0.42, 0.32, 0.22)
+		"dirtDark": col = rock_color.darkened(0.2)
+		"stone": col = Color(0.55, 0.55, 0.54)
+		"stoneDark": col = Color(0.42, 0.42, 0.41)
+		"colorRed", "colorRedDark": col = Color(0.78, 0.14, 0.14)
+		"colorYellow": col = Color(0.95, 0.80, 0.20)
+		"colorPurple": col = Color(0.55, 0.40, 0.80)
+		"colorTan": col = Color(0.78, 0.64, 0.44)
+		"colorWhite", "_defaultMat": col = Color(0.90, 0.88, 0.80)
+		_:
+			if old_mat is BaseMaterial3D:
+				col = (old_mat as BaseMaterial3D).albedo_color
+	var m := StandardMaterial3D.new()
+	m.resource_name = mat_name
+	m.albedo_color = col
+	m.roughness = 0.9
+	m.metallic = 0.0
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_nk_cache["mat:" + key] = m
+	return m
+
+
+# Un punto (x, z) e' utilizzabile se e' lontano dalla strada e dai piazzali e non troppo
+# ripido. (Il terreno e' piano a quota 0 appena fuori dalla strada: li si puo' piantare.)
+func _nk_valid(p2: Vector2, road_xz: PackedVector2Array, clearance: float, max_slope: float) -> bool:
+	if _near_lot(p2.x, p2.y, 3.0):
+		return false
+	var c2 := clearance * clearance
+	for rp in road_xz:
+		if p2.distance_squared_to(rp) < c2:
+			return false
+	return _sample_terrain_slope(p2.x, p2.y) <= max_slope
+
+
+# Aggiunge un'istanza (rotazione casuale, affondata nel terreno) al gruppo del suo modello.
+# collider: "" nessuno, "box" per le rocce, "trunk" per gli alberi.
+func _nk_add(rng: RandomNumberGenerator, buckets: Dictionary, colliders: StaticBody3D, model: String,
+		p2: Vector2, scale_range: Vector2, shadows: bool, collider: String, near_road: bool) -> void:
+	var mesh := _nk_mesh(model)
+	if mesh == null:
+		return
+	var sc := rng.randf_range(scale_range.x, scale_range.y)
+	var rot := rng.randf_range(0.0, TAU)
+	var y := _sample_terrain_height(p2.x, p2.y) - 0.05 * sc
+	var basis := Basis(Vector3.UP, rot).scaled(Vector3.ONE * sc)
+	if not buckets.has(model):
+		buckets[model] = {"xf": [], "shadows": shadows}
+	buckets[model]["xf"].append(Transform3D(basis, Vector3(p2.x, y, p2.y)))
+	if not near_road or collider == "":
+		return
+	var cs := CollisionShape3D.new()
+	if collider == "box":
+		var bb := mesh.get_aabb()
+		var box := BoxShape3D.new()
+		box.size = Vector3(bb.size.x * sc * 0.85, bb.size.y * sc, bb.size.z * sc * 0.85)
+		cs.shape = box
+		cs.transform = Transform3D(Basis(Vector3.UP, rot), Vector3(p2.x, y + bb.size.y * sc * 0.5, p2.y))
+	else:
+		var cyl := CylinderShape3D.new()
+		cyl.radius = 0.3 * sc / 4.0
+		cyl.height = 4.0 * sc / 4.0
+		cs.shape = cyl
+		cs.position = Vector3(p2.x, y + cyl.height * 0.5, p2.y)
+	colliders.add_child(cs)
+
+
+func _build_nature_kit() -> void:
+	if _terrain_heights.is_empty() or centerline.size() < 3:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = nature_seed
+	var n := centerline.size()
+	var road_xz := PackedVector2Array()
+	for p in centerline:
+		road_xz.append(Vector2(p.x, p.z))
+	var rail_out := road_width * 0.5 + rail_offset + rail_thickness
+	var buckets := {}
+	var colliders := StaticBody3D.new()
+	colliders.name = "NatureKitColliders"
+	var near2 := 15.0 * 15.0  # collider solo per quello che sta vicino alla strada
+	var rock_count := 0
+	var hairpin_samples := 0
+
+	# 1) rocce nell'interno dei tornanti
+	if enable_rocks:
+		var k := maxi(1, int(round(hairpin_window * 0.5 / step_length)))
+		var min_turn := hairpin_window / maxf(hairpin_max_radius, 1.0)  # radianti
+		for i in range(k, n - k):
+			var t_in := basis_at(i - k).z
+			var t_out := basis_at(i + k).z
+			var turn := t_in.signed_angle_to(t_out, Vector3.UP)  # > 0 = curva a sinistra
+			if absf(turn) < min_turn:
+				continue
+			hairpin_samples += 1
+			# _side() e' il lato destro: l'interno e' dalla parte verso cui si gira
+			var inner := -_side(i) if turn > 0.0 else _side(i)
+			for _a in 2:
+				if rng.randf() > rock_chance * nature_density:
+					continue
+				var d := rail_out + 1.2 + rng.randf() * 7.0
+				var pos := centerline[i] + inner * d
+				var p2 := Vector2(pos.x, pos.z)
+				if not _nk_valid(p2, road_xz, nk_min_road_distance, 1.2):
+					continue
+				var pool := NK_ROCKS if rng.randf() < 0.7 else NK_SMALL_ROCKS
+				var scale_range := rock_scale if pool == NK_ROCKS else rock_scale * 0.8
+				var near := _min_d2(p2, road_xz) < near2
+				_nk_add(rng, buckets, colliders, pool[rng.randi() % pool.size()], p2, scale_range, true, "box", near)
+				rock_count += 1
+
+	# 2) fascia di alberi ai lati della strada + vegetazione bassa
+	for i in range(0, n, 2):
+		var side := _side(i)
+		var tan := Vector3(side.z, 0.0, -side.x)
+		for sgn: float in [-1.0, 1.0]:
+			if rng.randf() < nk_tree_chance * nature_density:
+				var d := rail_out + 3.0 + rng.randf() * nk_tree_band
+				var pos := centerline[i] + side * sgn * d + tan * rng.randf_range(-2.0, 2.0)
+				var p2 := Vector2(pos.x, pos.z)
+				if _nk_valid(p2, road_xz, nk_min_road_distance, max_tree_slope) and _nk_spacing_ok(p2):
+					_nk_register(p2)
+					var near := _min_d2(p2, road_xz) < near2
+					_nk_add(rng, buckets, colliders, NK_TREES[rng.randi() % NK_TREES.size()], p2, nk_tree_scale, true, "trunk", near)
+			var count := int(plant_per_sample * nature_density)
+			if rng.randf() < plant_per_sample * nature_density - float(count):
+				count += 1
+			for _b in count:
+				var d2 := rail_out + 0.8 + rng.randf() * plant_band
+				var pos2 := centerline[i] + side * sgn * d2 + tan * rng.randf_range(-2.0, 2.0)
+				var q2 := Vector2(pos2.x, pos2.z)
+				if not _nk_valid(q2, road_xz, rail_out + 0.8, 1.2):
+					continue
+				var roll := rng.randf()
+				if roll < 0.35:
+					_nk_add(rng, buckets, colliders, NK_BUSHES[rng.randi() % NK_BUSHES.size()], q2, Vector2(3.5, 6.0), false, "", false)
+				elif roll < 0.8:
+					_nk_add(rng, buckets, colliders, NK_GRASS[rng.randi() % NK_GRASS.size()], q2, Vector2(3.0, 5.0), false, "", false)
+				elif roll < 0.92:
+					_nk_add(rng, buckets, colliders, NK_FLOWERS[rng.randi() % NK_FLOWERS.size()], q2, Vector2(3.0, 5.0), false, "", false)
+				elif roll < 0.97:
+					_nk_add(rng, buckets, colliders, NK_SMALL_ROCKS[rng.randi() % NK_SMALL_ROCKS.size()], q2, Vector2(2.5, 4.5), false, "", false)
+				else:
+					_nk_add(rng, buckets, colliders, NK_DEBRIS[rng.randi() % NK_DEBRIS.size()], q2, Vector2(3.0, 4.5), false, "", false)
+
+	# 3) un MultiMesh per modello (materiali originali del kit)
+	var root := Node3D.new()
+	root.name = "NatureKit"
+	var total := 0
+	for model: String in buckets:
+		var xf: Array = buckets[model]["xf"]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = _nk_mesh(model)
+		mm.instance_count = xf.size()
+		for j in xf.size():
+			mm.set_instance_transform(j, xf[j])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.name = "NK_" + model
+		mmi.multimesh = mm
+		if not buckets[model]["shadows"]:
+			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mmi.visibility_range_end = 140.0
+		root.add_child(mmi)
+		total += xf.size()
+	if colliders.get_child_count() > 0:
+		root.add_child(colliders)
+	add_child(root)
+	print("[MountainRoad] Nature Kit: %d istanze, %d rocce in %d campioni di tornante, %d collider" % [
+		total, rock_count, hairpin_samples, colliders.get_child_count()])
+
+
+func _min_d2(p2: Vector2, road_xz: PackedVector2Array) -> float:
+	var best := INF
+	for rp in road_xz:
+		best = minf(best, p2.distance_squared_to(rp))
+	return best
+
+
+# Spaziatura tra alberi: usa la stessa griglia della vegetazione originale.
+func _nk_spacing_ok(p2: Vector2) -> bool:
+	var gx := int(floor(p2.x / min_tree_spacing))
+	var gz := int(floor(p2.y / min_tree_spacing))
+	for dx in range(-1, 2):
+		for dz in range(-1, 2):
+			var key := Vector2i(gx + dx, gz + dz)
+			if _veg_grid.has(key):
+				for other: Vector2 in _veg_grid[key]:
+					if p2.distance_squared_to(other) < nk_tree_spacing * nk_tree_spacing:
+						return false
+	return true
+
+
+func _nk_register(p2: Vector2) -> void:
+	var key := Vector2i(int(floor(p2.x / min_tree_spacing)), int(floor(p2.y / min_tree_spacing)))
+	if not _veg_grid.has(key):
+		_veg_grid[key] = []
+	_veg_grid[key].append(p2)

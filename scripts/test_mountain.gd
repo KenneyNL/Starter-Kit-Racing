@@ -34,6 +34,14 @@ const NOW_PLAYING_BANNER := preload("res://scenes/now_playing_banner.tscn")
 ## Cambiando il seed cambia la disposizione degli alberi.
 @export var vegetation_seed: int = 12345
 
+@export_group("Nature Kit")
+## Rocce nei tornanti, piu' alberi e vegetazione dal Kenney Nature Kit (oltre a quelli gia' presenti).
+@export var enable_nature_kit: bool = true
+## Moltiplicatore della densita' di alberi/vegetazione del Nature Kit (1.0 = default).
+@export_range(0.0, 3.0, 0.1) var nature_density: float = 1.0
+## Emissione dei catarifrangenti dei guardrail (la versione notturna li accende di piu').
+@export var reflector_glow: float = 0.6
+
 @onready var path: Path3D = $RoadPath
 
 var road: MountainRoad
@@ -59,6 +67,9 @@ func _ready() -> void:
 	road.min_tree_spacing = min_tree_spacing
 	road.max_tree_slope = max_tree_slope
 	road.vegetation_seed = vegetation_seed
+	road.enable_nature_kit = enable_nature_kit
+	road.nature_density = nature_density
+	road.reflector_glow = reflector_glow
 	road.finish_reached.connect(_on_finish_reached)
 	road.build()
 	_make_spectators()

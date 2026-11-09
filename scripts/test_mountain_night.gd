@@ -44,6 +44,11 @@ extends "res://scripts/test_mountain.gd"
 var _halo_material_cache: Dictionary = {}
 
 
+func _init() -> void:
+	# di notte i catarifrangenti dei guardrail brillano molto di piu'
+	reflector_glow = 3.0
+
+
 func _ready() -> void:
 	super._ready()
 	if enable_lampposts:
