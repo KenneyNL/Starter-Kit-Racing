@@ -185,6 +185,63 @@ func _find_wheel_nodes(root: Node3D) -> Array[Node3D]:
 		if _has_wheel_ancestor(node, root) or not _contains_mesh(node):
 			continue
 		result.append(node)
+
+	if result.size() >= 4:
+		return result
+
+	# Poly Pizza exports do not always preserve semantic wheel names.
+	# Fall back to geometry: wheel meshes are low in the car, compact, and have
+	# one noticeably thinner axis compared with the tyre diameter.
+	return _find_wheel_meshes_by_geometry(root)
+
+
+func _find_wheel_meshes_by_geometry(root: Node3D) -> Array[Node3D]:
+	var scored: Array = []
+	var bounds := _measure_model_bounds(root)
+	var car_bottom := bounds.position.y
+	var car_height := maxf(bounds.size.y, 0.001)
+
+	for item in root.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := item as MeshInstance3D
+		if mesh_instance == null or mesh_instance.mesh == null:
+			continue
+
+		var size := mesh_instance.mesh.get_aabb().size.abs()
+		var dims := [size.x, size.y, size.z]
+		dims.sort()
+		var thin: float = dims[0]
+		var diameter_a: float = dims[1]
+		var diameter_b: float = dims[2]
+		if diameter_b <= 0.001:
+			continue
+
+		var thin_ratio := thin / diameter_b
+		var round_ratio := diameter_a / diameter_b
+		if thin_ratio > 0.75 or round_ratio < 0.55:
+			continue
+
+		var local_pos := _model_local_position(root, mesh_instance)
+		var height_ratio := (local_pos.y - car_bottom) / car_height
+		if height_ratio > 0.65:
+			continue
+
+		var score := (1.0 - thin_ratio) + round_ratio + (1.0 - clampf(height_ratio, 0.0, 1.0))
+		scored.append({"node": mesh_instance, "score": score})
+
+	scored.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a["score"]) > float(b["score"])
+	)
+
+	var result: Array[Node3D] = []
+	for entry in scored:
+		var node := entry["node"] as Node3D
+		if node != null:
+			result.append(node)
+		if result.size() == 4:
+			break
+
+	if result.size() < 4:
+		push_warning("VehicleSelectable: RX-7 geometric wheel discovery found only %d candidate(s)." % result.size())
 	return result
 
 
@@ -313,9 +370,10 @@ func _rotate_rx7_wheel(wheel: Node3D, steer_angle: float) -> void:
 	if parent == null:
 		return
 
-	var up_in_parent := parent.global_basis.inverse() * vehicle_model.global_basis.y
-	var steer_axis_local := (base_quat.inverse() * up_in_parent).normalized()
+	var steer_axis_parent := (parent.global_basis.inverse() * vehicle_model.global_basis.y).normalized()
 	var roll_axis: Vector3 = _rx7_roll_axes.get(wheel, Vector3.RIGHT)
-	var steer_quat := Quaternion(steer_axis_local, steer_angle)
+	var steer_quat := Quaternion(steer_axis_parent, steer_angle)
 	var roll_quat := Quaternion(roll_axis, wheel_roll_angle)
-	wheel.quaternion = base_quat * steer_quat * roll_quat
+	# Steering happens in the parent/car frame; rolling happens in the wheel's
+	# own imported frame. Preserve the model's original wheel orientation.
+	wheel.quaternion = steer_quat * base_quat * roll_quat
