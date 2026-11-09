@@ -1,0 +1,44 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://byrw1vbphwceu"
+path.s3tc="res://.godot/imported/vehicle-toyota-mazdarx7_Palette.png-214b55f710e6aa39f6ff9c9d8e74b46e.s3tc.ctex"
+metadata={
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
+}
+generator_parameters={
+"md5": "507b00d35d0f3012a9e79196c4d862cf"
+}
+
+[deps]
+
+source_file="res://models/vehicle-toyota-mazdarx7_Palette.png"
+dest_files=["res://.godot/imported/vehicle-toyota-mazdarx7_Palette.png-214b55f710e6aa39f6ff9c9d8e74b46e.s3tc.ctex"]
+
+[params]
+
+compress/mode=2
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/uastc_level=0
+compress/rdo_quality_loss=0.0
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/channel_remap/red=0
+process/channel_remap/green=1
+process/channel_remap/blue=2
+process/channel_remap/alpha=3
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=0
