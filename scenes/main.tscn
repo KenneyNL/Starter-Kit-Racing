@@ -2,7 +2,7 @@
 
 [ext_resource type="Environment" uid="uid://c3bs0wfxpri8g" path="res://scenes/main-environment.tres" id="1_q4t1r"]
 [ext_resource type="Script" uid="uid://b24bstassw26s" path="res://scripts/view.gd" id="5_0lrhn"]
-[ext_resource type="PackedScene" uid="uid://badoy1c127yhf" path="res://scenes/vehicle.tscn" id="7_o6xl0"]
+[ext_resource type="PackedScene" uid="uid://badoy1c127yhf" path="res://scenes/vehicle_selectable.tscn" id="7_o6xl0"]
 [ext_resource type="MeshLibrary" uid="uid://b6myd2b7l2o2j" path="res://models/Library/mesh-library.tres" id="8_eg7gk"]
 [ext_resource type="PackedScene" uid="uid://c44tfiddyjjm1" path="res://models/vehicle-truck-green.glb" id="9_cmq2j"]
 [ext_resource type="PackedScene" uid="uid://c5e64mpylh1ge" path="res://models/vehicle-truck-purple.glb" id="10_p3c1o"]

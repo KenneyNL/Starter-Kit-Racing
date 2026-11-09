@@ -5,7 +5,7 @@ extends Node3D
 # Non usa main.tscn ne' la GridMap. Tasto R = ricomincia.
 
 const MountainRoad := preload("res://scripts/mountain_road.gd")
-const VEHICLE_SCENE := preload("res://scenes/vehicle.tscn")
+const VEHICLE_SCENE := preload("res://scenes/vehicle_selectable.tscn")
 const VIEW_SCRIPT := preload("res://scripts/view.gd")
 const ENVIRONMENT := preload("res://scenes/main-environment.tres")
 const DRIFT_BAR := preload("res://scenes/drift_bar.tscn")

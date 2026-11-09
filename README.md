@@ -21,7 +21,7 @@
 2. Clone the repository and open `project.godot`.
 3. Press F5. The boot scene is `scenes/menu.tscn`.
 
-From the menu: **Single Player**, then a track. **Option** is still a placeholder.
+From the menu: **Single Player**, choose a car, then choose a track. **Option** is still a placeholder.
 
 ## Controls
 
@@ -47,7 +47,7 @@ That menu screenshot is from before the latest entry. **Mountain Night** is in t
 
 ### Circuit
 
-`scenes/main.tscn`. The kit's tile circuit, still a `GridMap`, with parked trucks as scenery. Free roam, no finish line. AE86, smoke, skid marks, and *Dejavu Kaze*.
+`scenes/main.tscn`. The kit's tile circuit, still a `GridMap`, with parked trucks as scenery. Free roam, no finish line. Selectable AE86 or RX-7, smoke, skid marks, and *Dejavu Kaze*.
 
 <p align="center">
   <img src="screenshots/screenshot.png" alt="AE86 on the tile circuit">
@@ -74,7 +74,7 @@ That menu screenshot is from before the latest entry. **Mountain Night** is in t
 
 ## In the car
 
-- **Toyota AE86** model. All four wheels roll with speed; the front wheels steer. The body leans under acceleration and in corners
+- **Toyota AE86** or **Mazda RX-7**, selectable before the track. The vehicle adapter binds each model to the same arcade physics and effects
 - Rear-wheel smoke while drifting, and a screech that rises with intensity
 - **Skid marks** on the asphalt, including on slopes. They last about a minute and fade over the last few seconds
 
@@ -94,7 +94,7 @@ The previous text still described the template: basic controls, tiles, and how t
 | Added | Where |
 | --- | --- |
 | Menu, splash, icon, track select | `scenes/menu.tscn` |
-| AE86 with wheel roll and steering | `scenes/vehicle.tscn` |
+| Selectable AE86 / RX-7 with wheel roll and steering | `scenes/vehicle_selectable.tscn` |
 | Six-segment Drift Bar | `scripts/drift_bar.gd` |
 | Smoke, screech, engine, impact | `scripts/vehicle.gd` |
 | Fading skid marks | `scripts/skid_marks.gd` |
@@ -118,7 +118,7 @@ In `scenes/test_mountain.tscn`, edit the `RoadPath` curve. On startup, `scripts/
 
 ### Car model
 
-The drivable car is `models/vehicle-toyota-ae86.glb`, instanced in `scenes/vehicle.tscn`. Its wheels do not use the Kenney kit names: they live under `RootNode/Car` as `Wheel1` … `Wheel4` (1 and 3 in front, 4 and 2 in the rear).
+The selectable cars are `models/vehicle-toyota-ae86.glb` and `models/vehicle-toyota-mazdarx7.glb`, loaded by `scenes/vehicle_selectable.tscn`. The AE86 keeps its known `RootNode/Car/Wheel1` … `Wheel4` mapping; the RX-7 adapter discovers wheel nodes from the imported model and normalizes its visual scale.
 
 The trucks and `scenes/vehicle-motorcycle.tscn` are still in the project, but not in the menu. Kenney models still expect the children `body`, `wheel-front-left`, `wheel-front-right`, `wheel-back-left`, and `wheel-back-right`.
 
