@@ -21,7 +21,12 @@ If you redistribute a build, keep this file with the game. The Suno soundtrack i
   License: [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/) (CC-BY).
   Attribution must be kept.
 
-- **Mazda RX-7** by [IvOfficial](https://poly.pizza/m/SnIoWlh7S2), via Poly Pizza.\n  File: `models/vehicle-toyota-mazdarx7.glb`.\n  License: [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/) (CC-BY).\n  Attribution must be kept.\n\n- Kenney kit tiles, decorations, trucks, motorcycle, and tofu shop, in `models/`.
+- **Mazda RX-7** by [IvOfficial](https://poly.pizza/m/SnIoWlh7S2), via Poly Pizza.
+  File: `models/vehicle-toyota-mazdarx7.glb`.
+  License: [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/) (CC-BY).
+  Attribution must be kept.
+
+- Kenney kit tiles, decorations, trucks, motorcycle, and tofu shop, in `models/`.
   CC0. The tofu shop is an item in the circuit mesh library.
 
 - **Nature Kit 2.1** by [Kenney](https://kenney.nl/assets/nature-kit), in `assets/kenney_nature-kit/`.
