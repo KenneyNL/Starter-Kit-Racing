@@ -41,6 +41,8 @@ const NOW_PLAYING_BANNER := preload("res://scenes/now_playing_banner.tscn")
 @export_range(0.0, 3.0, 0.1) var nature_density: float = 1.0
 ## Emissione dei catarifrangenti dei guardrail (la versione notturna li accende di piu').
 @export var reflector_glow: float = 0.6
+## Colore del pavimento di base oltre il terreno generato (stesso verde di grass_color).
+@export var floor_color := Color(0.22, 0.40, 0.16)
 
 @onready var path: Path3D = $RoadPath
 
@@ -103,7 +105,7 @@ func _make_world() -> void:
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(800.0, 800.0)
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.36, 0.55, 0.28)
+	mat.albedo_color = floor_color
 	plane.material = mat
 	var mi := MeshInstance3D.new()
 	mi.mesh = plane

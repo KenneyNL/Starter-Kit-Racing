@@ -67,8 +67,13 @@ const GATE_SCENE := preload("res://models/track-finish.glb")
 @export_group("Aspetto")
 @export var asphalt_color := Color(0.25, 0.26, 0.28)
 @export var line_color := Color(0.9, 0.9, 0.85)
-@export var grass_color := Color(0.36, 0.55, 0.28)
-@export var rock_color := Color(0.5, 0.47, 0.43)
+## Verde base del terreno (sRGB), scelto per stare vicino ai verdi del Nature Kit.
+@export var grass_color := Color(0.22, 0.40, 0.16)
+## Il terreno varia a chiazze tra erba scura, normale e chiara/secca (0 = tinta unita).
+@export_range(0.0, 1.0, 0.05) var grass_variation: float = 0.5
+## Tinta delle chiazze piu' chiare e secche.
+@export var grass_dry_color := Color(0.38, 0.45, 0.17)
+@export var rock_color := Color(0.40, 0.38, 0.34)
 @export var rail_color := Color(0.8, 0.8, 0.82)
 
 @export_group("Vegetazione")
@@ -380,6 +385,15 @@ func _build_terrain() -> void:
 	_terrain_nx = nx
 	_terrain_nz = nz
 	_terrain_heights = heights
+	# variazione del colore dell'erba: chiazze grandi (~35 m) + dettaglio (~9 m)
+	var noise_big := FastNoiseLite.new()
+	noise_big.seed = vegetation_seed + 11
+	noise_big.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise_big.frequency = 0.03
+	var noise_fine := FastNoiseLite.new()
+	noise_fine.seed = vegetation_seed + 23
+	noise_fine.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise_fine.frequency = 0.11
 	for iz in nz:
 		for ix in nx:
 			var ixl := maxi(ix - 1, 0)
@@ -390,7 +404,20 @@ func _build_terrain() -> void:
 			var gz := (heights[izu * nx + ix] - heights[izd * nx + ix]) / (terrain_cell * (izu - izd))
 			var rock := clampf((Vector2(gx, gz).length() - 0.45) / 0.5, 0.0, 1.0)
 			verts[iz * nx + ix] = Vector3(min_p.x + ix * terrain_cell, heights[iz * nx + ix], min_p.y + iz * terrain_cell)
-			cols[iz * nx + ix] = grass_color.lerp(rock_color, rock)
+			var wx := min_p.x + ix * terrain_cell
+			var wz := min_p.y + iz * terrain_cell
+			var v := clampf(noise_big.get_noise_2d(wx, wz) * 0.75 + noise_fine.get_noise_2d(wx, wz) * 0.35, -1.0, 1.0)
+			var grass := grass_color
+			if v < 0.0:
+				grass = grass_color.darkened(-v * grass_variation * 0.55)
+			else:
+				grass = grass_color.lerp(grass_dry_color, v * grass_variation * 0.8)
+			var rock_c := rock_color
+			if v < 0.0:
+				rock_c = rock_color.darkened(-v * grass_variation * 0.4)
+			else:
+				rock_c = rock_color.lightened(v * grass_variation * 0.2)
+			cols[iz * nx + ix] = grass.lerp(rock_c, rock)
 
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -403,7 +430,19 @@ func _build_terrain() -> void:
 			_tri(st, verts[i00], verts[i10], verts[i01], Vector3.UP, cols[i00], cols[i10], cols[i01])
 			_tri(st, verts[i10], verts[i11], verts[i01], Vector3.UP, cols[i10], cols[i11], cols[i01])
 	st.generate_normals()
-	_add_mesh_body(st.commit(), "Terrain", road_friction)
+	var terrain_mesh := st.commit()
+	_add_collider(terrain_mesh, "Terrain", road_friction)
+	# i colori del terreno sono in sRGB (gli altri vertex color della strada restano come prima)
+	var tmat := StandardMaterial3D.new()
+	tmat.vertex_color_use_as_albedo = true
+	tmat.vertex_color_is_srgb = true
+	tmat.roughness = 0.95
+	tmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var tmi := MeshInstance3D.new()
+	tmi.name = "Terrain"
+	tmi.mesh = terrain_mesh
+	tmi.material_override = tmat
+	add_child(tmi)
 
 
 func _build_road() -> void:
