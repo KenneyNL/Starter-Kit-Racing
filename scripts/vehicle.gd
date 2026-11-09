@@ -44,6 +44,12 @@ var current_steer_angle: float = 0.0
 ## Moltiplica la spinta del veicolo (1.0 = velocita' originale). Lo imposta ogni mappa.
 @export var speed_multiplier: float = 1.0
 
+@export_group("Skid marks")
+## Lascia sull'asfalto i segni delle gomme posteriori durante il drift.
+@export var skid_marks_enabled: bool = true
+## Secondi per cui i segni restano visibili.
+@export var skid_marks_lifetime: float = 60.0
+
 @export_group("Body collision")
 ## Fa collidere con muri e ostacoli anche il corpo dell'auto, non solo la sfera di fisica.
 ## Senza, cofano e coda (1,1 m oltre la sfera) attraversano i muri.
@@ -84,6 +90,15 @@ func _ready():
 	# Capture base quaternions of each wheel after the GLB is loaded
 	# We need to defer this to ensure the imported scene is fully ready
 	_store_wheel_base_rotations.call_deferred()
+	if skid_marks_enabled:
+		_setup_skid_marks()
+
+func _setup_skid_marks():
+	var skid_marks := SkidMarks.new()
+	skid_marks.name = "SkidMarks"
+	skid_marks.target = self
+	skid_marks.lifetime = skid_marks_lifetime
+	add_child(skid_marks)
 
 func _store_wheel_base_rotations():
 	for wheel in [wheel_fl, wheel_fr, wheel_bl, wheel_br]:
