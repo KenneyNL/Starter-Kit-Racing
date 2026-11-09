@@ -28,8 +28,12 @@ func _load_selected_model() -> void:
 		push_error("VehicleSelectable: selected vehicle scene could not be instantiated.")
 		return
 
-	model_instance.name = "Model"
-	vehicle_model.add_child(model_instance)
+	model_instance.name = "SelectedModel"
+	var visual_root := get_node_or_null("Container/Model") as Node3D
+	if visual_root == null:
+		push_error("VehicleSelectable: Container/Model visual root is missing.")
+		return
+	visual_root.add_child(model_instance)
 
 	if selected_vehicle_id == "rx7":
 		_fit_rx7_model(model_instance)

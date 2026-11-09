@@ -1,7 +1,6 @@
-[gd_scene format=3 uid="uid://badoy1c127yhf"]
+[gd_scene format=3]
 
-[ext_resource type="Script" uid="uid://bqite16pastgo" path="res://scripts/vehicle_selectable.gd" id="1_e2g1l"]
-[ext_resource type="PackedScene" uid="uid://car7ia2txtlui" path="res://models/vehicle-toyota-ae86.glb" id="2_vuxys"]
+[ext_resource type="Script" path="res://scripts/vehicle_selectable.gd" id="1_e2g1l"]
 [ext_resource type="Texture2D" uid="uid://c026qrhqxgw3n" path="res://sprites/smoke.png" id="3_p2hth"]
 [ext_resource type="AudioStream" uid="uid://2in1jtv5bh0y" path="res://audio/skid.ogg" id="4_mcce1"]
 [ext_resource type="AudioStream" uid="uid://j6x2is8pyt8y" path="res://audio/engine.ogg" id="5_kcati"]
