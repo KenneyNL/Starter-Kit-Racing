@@ -99,9 +99,10 @@ func _configure_rx7_nodes(model_instance: Node3D) -> void:
 	var candidates := _find_wheel_nodes(model_instance)
 	if candidates.size() < 4:
 		push_warning(
-			"VehicleSelectable: RX-7 wheel discovery found %d wheel node(s), expected 4. "
-			+ "The car remains drivable, but wheel animation/skid placement may need node-path tuning."
-			% candidates.size()
+			(
+				"VehicleSelectable: RX-7 wheel discovery found %d wheel node(s), expected 4. "
+				+ "The car remains drivable, but wheel animation/skid placement may need node-path tuning."
+			) % candidates.size()
 		)
 
 	if candidates.size() > 4:
@@ -132,16 +133,20 @@ func _configure_rx7_nodes(model_instance: Node3D) -> void:
 		return _model_local_position(model_instance, a).z > _model_local_position(model_instance, b).z
 	)
 
-	var front_pair := named_front if named_front.size() == 2 else []
-	var rear_pair := named_rear if named_rear.size() == 2 else []
-	if front_pair.size() != 2 or rear_pair.size() != 2:
-		front_pair.clear()
-		rear_pair.clear()
+	var front_pair: Array[Node3D] = []
+	var rear_pair: Array[Node3D] = []
+	if named_front.size() == 2 and named_rear.size() == 2:
+		front_pair.append_array(named_front)
+		rear_pair.append_array(named_rear)
+	else:
 		for index in by_z.size():
+			var wheel := by_z[index] as Node3D
+			if wheel == null:
+				continue
 			if index < 2:
-				front_pair.append(by_z[index])
+				front_pair.append(wheel)
 			else:
-				rear_pair.append(by_z[index])
+				rear_pair.append(wheel)
 
 	_sort_pair_by_lateral_position(model_instance, front_pair)
 	_sort_pair_by_lateral_position(model_instance, rear_pair)
