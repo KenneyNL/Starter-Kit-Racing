@@ -1,110 +1,131 @@
-<p align="center"><img src="icon_2.png"/></p>
+<p align="center">
+  <img src="icon.png" width="160" alt="Deja Vu Racing">
+</p>
 
-# Deja Vu Racing
+<h1 align="center">Deja Vu Racing</h1>
 
-This project started as a fork of Kenney's Starter Kit Racing with the goal of creating a arcade racing experience freely inspired by Initial D and the JDM drift culture.
+<p align="center">
+  Arcade drift in Godot, liberamente ispirato a <em>Initial D</em> e alla cultura JDM.<br>
+  Fork del <a href="https://github.com/KenneyNL/Starter-Kit-Racing">Starter Kit Racing</a> di Kenney: non è più solo il template.
+</p>
 
-This package includes a basic template for a racing game in Godot 4.6. Includes features like:
+<p align="center">
+  <img src="screenshots/ss_mountan.png" alt="Discesa di montagna di giorno">
+</p>
 
-- Arcade-like vehicle controls
+> Work in progress · **Godot 4.7** (Forward+) · fisica **Jolt**
 
-- Custom Toyota AE86 3D car model
+## Come provarlo
 
-- Animated wheel rotation and steering tilt
+1. Installa [Godot 4.7](https://godotengine.org/download).
+2. Clona il repository e apri `project.godot`.
+3. Premi F5. La scena di avvio è `scenes/menu.tscn`.
 
-- Eurobeat-inspired soundtrack ("Dejavu Kaze")
+Dal menu: **Single Player**, poi un tracciato. **Option** è ancora un segnaposto.
 
-- Particle smoke effects
+## Controlli
 
-- GridMap based track creation
+Tastiera, frecce e gamepad (stick sinistro e grilletti).
 
-- Base 3D models & sound effects (CC0 licensed)
-
-- New drift bar
-
-<p align="center"><img src="drift-bar-preview.png"/></p>
-
-### Screenshot
-
-<p align="center"><img src="screenshots/screenshot.png"/></p>
-
-<p align="center"><img src="screenshots/screenshot_track_select.png"/></p>
-
-
-### Controls
-
-| Key | Command |
+| Input | Azione |
 | --- | --- |
-| <kbd>W</kbd> | Accelerate/brake |
-| <kbd>S</kbd> | Brake/reverse |
-| <kbd>A</kbd> <kbd>D</kbd> | Steering |
+| <kbd>W</kbd> / <kbd>↑</kbd> / grilletto destro | Acceleratore |
+| <kbd>S</kbd> / <kbd>↓</kbd> / grilletto sinistro | Freno e retromarcia |
+| <kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd> / stick sinistro | Sterzo |
+| <kbd>R</kbd> | Riavvia la discesa. Nel riepilogo: **Retry** |
+| <kbd>Esc</kbd> | Dal riepilogo di gara torna al menu |
 
-### Instructions
+La **Drift Bar** in alto si riempie con l'angolo di sbandata, sei segmenti da circa 10° a 42°. Sale subito e scende un pezzo alla volta.
 
-#### 1. How to adjust the track?
+## Tracciati
 
-Select the 'GridMap' node and place pre-made tiles in the world.
+<p align="center">
+  <img src="screenshots/ss_track%20select.png" alt="Menu di selezione tracciato">
+</p>
 
-#### 2. How to change the car model?
+Lo screenshot del menu è precedente all'ultima voce: oggi c'è anche **Mountain Night**.
 
-Choose one of the included vehicles in the project (for example 'vehicle-truck-yellow.glb') and drag it into the project as a child of 'Container'. Then change the name to 'Model'.
+### Circuit
 
-#### 3. How to add custom car models?
+`scenes/main.tscn`. Il circuito a tile del kit, ancora una `GridMap`, con i furgoni parcheggiati come scenografia. Giro libero, senza traguardo. AE86, fumo, segni delle gomme e *Dejavu Kaze*.
 
-Follow the same steps as seen above but make sure your model has the following children;
+<p align="center">
+  <img src="screenshots/screenshot.png" alt="AE86 sul circuito a tile">
+</p>
 
-- `body` The body of the vehicle
+### Mountain
 
-- `wheel-front-left` The front left wheel of the vehicle
+`scenes/test_mountain.tscn`. Discesa generata a runtime da un `Path3D`: il primo punto è la partenza, l'ultimo il traguardo. L'auto va a 1,5× rispetto al circuito.
 
-- `wheel-front-right` The front right wheel of the vehicle
+- Terreno, asfalto, piazzali di cemento, archi di partenza e arrivo
+- Guardrail a W, pali e catarifrangenti. Il collider resta quello del muro
+- Il cofano e la coda collidono coi muri, non solo la sfera di fisica sotto l'auto
+- Alberi del kit originale, più il **Kenney Nature Kit**: pini, cespugli, erba, fiori, tronchi e rocce nell'interno dei tornanti. Vicino alla strada hanno un collider
+- Spettatori in pixel art ai lati della partenza, che alzano le braccia
+- Al traguardo il gioco va in pausa: tempo sul giro e, per ogni livello della Drift Bar, la percentuale di gara passata a quell'angolo. **Retry** ricarica la scena, **Menu** torna indietro
 
-- `wheel-back-left` The back left wheel of the vehicle
+### Mountain Night
 
-- `wheel-back-right` The back right wheel of the vehicle
+`scenes/test_mountain_night.tscn`. La stessa strada, di notte: luna, nebbia, glow, lampioni che si spengono oltre una certa distanza, fari e fanali sull'AE86, catarifrangenti più accesi.
 
-#### 4. How to change from a car to a motorcycle?
+<p align="center">
+  <img src="screenshots/ss_night.png" alt="Mountain di notte, fari accesi">
+</p>
 
-Remove the 'Vehicle' node from the main scene. Find the 'vehicle-motorcycle.tscn' scene and place it in your main scene, make sure to adjust the 'View' node to target the new vehicle.
+## In auto
 
-### License
+- Modello **Toyota AE86**. Le quattro ruote rotolano con la velocità; le anteriori sterzano. La scocca si inclina in accelerazione e in curva
+- Fumo dalle posteriori quando l'auto derapa, e stridio che sale con l'intensità
+- **Segni delle gomme** sull'asfalto, anche in pendenza. Restano circa un minuto e sfumano negli ultimi secondi
 
-MIT License
+<p align="center">
+  <img src="screenshots/ss_skid_maarks.png" alt="Segni delle gomme in un tornante">
+</p>
 
-Copyright (c) Kenney / LemoniceIT
+- Motore con volume e pitch legati a velocità e gas, più un impatto sulle collisioni
+- Camera che segue l'auto e arretra quando prendi velocità
+- Banner *Now Playing* all'ingresso di una scena, poi sparisce
+- In menu gira un edit di *Dejavu*; in gara, *Dejavu Kaze*
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+## Cosa non c'era nel README vecchio
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Il testo precedente descriveva ancora il template: controlli base, tile, e come sostituire il modello Kenney. Da allora il progetto è diventato un gioco, non un kit da cui partire.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+| Aggiunto | Dove |
+| --- | --- |
+| Menu, splash, icona, selezione tracciati | `scenes/menu.tscn` |
+| AE86 con roll e sterzo delle ruote | `scenes/vehicle.tscn` |
+| Drift Bar a sei segmenti | `scripts/drift_bar.gd` |
+| Fumo, stridio, motore, impatto | `scripts/vehicle.gd` |
+| Segni delle gomme con fade | `scripts/skid_marks.gd` |
+| Mountain da `Path3D`, con quota e tornanti | `scripts/mountain_road.gd` |
+| Guardrail, piazzali, archi, collider di carrozzeria | stessa scena, novembre 2026 |
+| Nature Kit ricolorato, rocce nei tornanti | `assets/kenney_nature-kit/` |
+| Spettatori billboard | `scripts/spectators.gd` |
+| Notte: lampioni, fari, fanali, nebbia | `scripts/test_mountain_night.gd` |
+| Riepilogo di gara (tempo e drift %) | `scripts/race_summary.gd` |
+| Colonna sonora e banner *Now Playing* | `ost/` |
 
-Assets included in this package (2D sprites, 3D models and sound effects) are CC0 licensed
+## Personalizzare
 
-The skid sound effect was made by Landeplage and is also CC0 licensed
+### Circuito a tile
 
-### THIRD-PARTY ASSETS & CREDITS
+In `scenes/main.tscn` seleziona `GridMap` e piazza i tile di `models/Library` (compreso il tofu shop).
 
-3D Models:
-- "Toyota AE86" by IvOfficial
-  Licensed under Creative Commons Attribution (CC-BY 4.0)
-  Source: Poly Pizza (https://poly.pizza/)
+### Discesa
 
-Audio & Soundtrack:
-- "Dejavu Kaze" generated via Suno AI
-  Licensed under Suno Terms of Service (Non-Commercial Use Only)
-  Source: https://suno.com/s/eWi3QKRFB9xy19Ha
+In `scenes/test_mountain.tscn` modifica la curva `RoadPath`. All'avvio `scripts/mountain_road.gd` ricostruisce terreno, strada, guardrail e vegetazione. La notte riusa la stessa curva e la stessa logica.
 
-  Sound Effect (car engine) by <a href="https://pixabay.com/it/users/finlo-43919229/?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=238996">Niilo Laitamäki</a> from <a href="https://pixabay.com//?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=238996">Pixabay</a>
+### Modello dell'auto
+
+L'auto in gioco è `models/vehicle-toyota-ae86.glb`, instanziata in `scenes/vehicle.tscn`. Le ruote non hanno i nomi del kit Kenney: stanno sotto `RootNode/Car` come `Wheel1` … `Wheel4` (1 e 3 davanti, 4 e 2 dietro).
+
+I furgoni e `scenes/vehicle-motorcycle.tscn` sono ancora nel progetto, ma non nel menu. Per quei modelli Kenney i figli attesi restano `body`, `wheel-front-left`, `wheel-front-right`, `wheel-back-left`, `wheel-back-right`.
+
+## Licenza
+
+Il codice è [MIT](LICENSE), copyright Kenney / LemoniceIT.
+
+Modelli, interfaccia e audio hanno licenze diverse: l'elenco è in [CREDITS.md](CREDITS.md).
+
+**La musica generata con Suno è solo per uso non commerciale.** Il resto del progetto non la rende liberamente ridistribuibile.
