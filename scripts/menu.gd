@@ -3,6 +3,8 @@ extends Control
 const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
 const GRAPHICS := preload("res://scripts/graphics_settings.gd")
 const UI_FONT := preload("res://assets/kenney_ui-pack-space-expansion/Font/Kenney Future Narrow.ttf")
+const CIRCUIT_RECORDS := preload("res://scripts/circuit_records.gd")
+const PROGRESSION := preload("res://scripts/progression.gd")
 const LEADERBOARD_PATH := "user://mountain_leaderboards.cfg"
 
 @onready var main_menu: VBoxContainer = %MainMenu
@@ -17,11 +19,15 @@ var _is_transitioning: bool = false
 var _settings: Dictionary
 var _options_panel: Control
 var _leaderboard_panel: Control
+var _rebind_action := ""
+var _rebind_button: Button
 
 
 func _ready() -> void:
+	_load_controls()
 	_settings = GRAPHICS.load_settings()
 	GRAPHICS.apply(_settings, get_viewport())
+	GRAPHICS.apply_world(_settings, get_tree().root)
 	$Center.anchor_left = 0.0
 	$Center.anchor_right = 1.0
 	$Center.anchor_top = 0.49
@@ -154,11 +160,22 @@ func _on_option_pressed() -> void:
 	_add_choice(content, "ANTI-ALIASING", ["OFF", "MSAA 2X", "MSAA 4X"], "antialiasing")
 	_add_choice(content, "DISPLAY MODE", ["WINDOWED", "FULLSCREEN"], "fullscreen")
 	_add_choice(content, "V-SYNC", ["OFF", "ON"], "vsync")
+	_add_choice(content, "GHOST CAR", ["OFF", "ON"], "ghost")
+	_add_choice(content, "SHADOWS", ["OFF", "ON", "HIGH"], "shadows")
+	_add_choice(content, "SSAO", ["OFF", "ON"], "ssao")
+	_add_choice(content, "VEGETATION", ["LOW", "MEDIUM", "HIGH"], "vegetation")
+	_add_choice(content, "MUSIC VOLUME", ["0%", "25%", "50%", "75%", "100%"], "music_volume")
+	_add_choice(content, "EFFECTS VOLUME", ["0%", "25%", "50%", "75%", "100%"], "effects_volume")
+	for action in ["forward", "back", "left", "right", "bounce"]:
+		var bind_button := _styled_button("REMAP " + action.to_upper())
+		bind_button.pressed.connect(_start_rebind.bind(action, bind_button))
+		content.add_child(bind_button)
 	var back := _styled_button("SAVE & BACK")
 	back.pressed.connect(func() -> void:
 		var error := GRAPHICS.save_settings(_settings)
 		if error != OK:
 			push_warning("Unable to save graphics settings: %s" % error)
+		_rebind_action = ""
 		_options_panel.queue_free()
 		_options_panel = null
 		main_menu.visible = true
@@ -198,11 +215,12 @@ func _make_overlay(title: String) -> Control:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.add_child(center)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(540, 0)
+	scroll.custom_minimum_size = Vector2(640, 540)
 	scroll.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	center.add_child(scroll)
 	var content := VBoxContainer.new()
-	content.custom_minimum_size.x = 500
+	content.custom_minimum_size.x = 600
 	content.add_theme_constant_override("separation", 10)
 	scroll.add_child(content)
 	var heading := Label.new()
@@ -229,10 +247,11 @@ func _add_choice(parent: VBoxContainer, label_text: String, options: Array[Strin
 	choice.custom_minimum_size = Vector2(220, 42)
 	for option in options:
 		choice.add_item(option)
-	choice.select(int(_settings[key]) if key != "fullscreen" and key != "vsync" else (1 if _settings[key] else 0))
+	choice.select(int(round(float(_settings[key]) / 25.0)) if key.ends_with("_volume") else (1 if bool(_settings[key]) else 0) if key in ["fullscreen", "vsync", "ghost", "ssao"] else int(_settings[key]))
 	choice.item_selected.connect(func(index: int) -> void:
-		_settings[key] = (index == 1) if key == "fullscreen" or key == "vsync" else index
+		_settings[key] = (index * 25) if key.ends_with("_volume") else (index == 1) if key in ["fullscreen", "vsync", "ghost", "ssao"] else index
 		GRAPHICS.apply(_settings, get_viewport())
+		GRAPHICS.apply_world(_settings, get_tree().root)
 	)
 	row.add_child(choice)
 
@@ -245,6 +264,19 @@ func _open_leaderboard() -> void:
 	var err := cfg.load(LEADERBOARD_PATH)
 	if err != OK and err != ERR_FILE_NOT_FOUND:
 		push_warning("Could not read leaderboards: %s" % err)
+	var circuit_title := Label.new()
+	circuit_title.text = "CIRCUIT - 3 LAPS"
+	content.add_child(circuit_title)
+	var circuit_runs := CIRCUIT_RECORDS.top()
+	for i in circuit_runs.size():
+		var run: Dictionary = circuit_runs[i]
+		var line := Label.new()
+		line.text = "%02d  %s  %.2f s" % [i + 1, str(run.get("car", "?")), float(run.get("time", 0.0))]
+		content.add_child(line)
+	if circuit_runs.is_empty():
+		var empty_circuit := Label.new()
+		empty_circuit.text = "NO CIRCUIT RECORDS YET"
+		content.add_child(empty_circuit)
 	for track in ["mountain_500m", "mountain_night_500m"]:
 		var heading := Label.new()
 		heading.text = "MOUNTAIN DAY" if track == "mountain_500m" else "MOUNTAIN NIGHT"
@@ -270,6 +302,28 @@ func _open_leaderboard() -> void:
 				line.add_theme_font_override("font", UI_FONT)
 				line.add_theme_font_size_override("font_size", 18)
 				content.add_child(line)
+	var profile := PROGRESSION.read()
+	var profile_heading := Label.new()
+	profile_heading.text = "DRIVER PROFILE"
+	profile_heading.add_theme_font_override("font", UI_FONT)
+	profile_heading.add_theme_font_size_override("font_size", 24)
+	content.add_child(profile_heading)
+	var total := Label.new()
+	total.text = "COMPLETED RACES: %d   RACE TIME: %.1f MIN" % [int(profile.get_value("global", "total_races", 0)), float(profile.get_value("global", "total_race_seconds", 0.0)) / 60.0]
+	content.add_child(total)
+	for section in profile.get_sections():
+		if section == "global":
+			continue
+		var best_time := float(profile.get_value(section, "best_time", 0.0))
+		var best_score := int(profile.get_value(section, "best_score", 0))
+		var medals: Dictionary = profile.get_value(section, "medals", {})
+		var line := Label.new()
+		line.text = "%s  |  BEST %.2f s  |  SCORE %d  |  %s" % [section.to_upper(), best_time, best_score, str(medals.keys())]
+		content.add_child(line)
+	var achievements: Dictionary = profile.get_value("global", "achievements", {})
+	var achievements_label := Label.new()
+	achievements_label.text = "ACHIEVEMENTS: " + (str(achievements.keys()) if not achievements.is_empty() else "NONE YET")
+	content.add_child(achievements_label)
 	var back := _styled_button("BACK")
 	back.pressed.connect(func() -> void:
 		_leaderboard_panel.queue_free()
@@ -279,3 +333,47 @@ func _open_leaderboard() -> void:
 	)
 	content.add_child(back)
 
+
+func _start_rebind(action: String, button: Button) -> void:
+	_rebind_action = action
+	_rebind_button = button
+	button.text = "PRESS A KEY FOR " + action.to_upper()
+
+func _input(event: InputEvent) -> void:
+	if _rebind_action.is_empty():
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE:
+			_rebind_action = ""
+			_rebind_button.text = "REMAP CANCELLED"
+			get_viewport().set_input_as_handled()
+			return
+		var mapped := InputEventKey.new()
+		mapped.physical_keycode = event.physical_keycode
+		var events := InputMap.action_get_events(_rebind_action)
+		for old in events:
+			if old is InputEventKey:
+				InputMap.action_erase_event(_rebind_action, old)
+		InputMap.action_add_event(_rebind_action, mapped)
+		var cfg := ConfigFile.new()
+		cfg.load("user://controls.cfg")
+		cfg.set_value("keys", _rebind_action, event.physical_keycode)
+		cfg.save("user://controls.cfg")
+		_rebind_button.text = "REMAP " + _rebind_action.to_upper() + ": " + event.as_text()
+		_rebind_action = ""
+		get_viewport().set_input_as_handled()
+
+func _load_controls() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load("user://controls.cfg") != OK:
+		return
+	for action in ["forward", "back", "left", "right", "bounce"]:
+		var code := int(cfg.get_value("keys", action, 0))
+		if code == 0:
+			continue
+		for old in InputMap.action_get_events(action):
+			if old is InputEventKey:
+				InputMap.action_erase_event(action, old)
+		var mapped := InputEventKey.new()
+		mapped.physical_keycode = code
+		InputMap.action_add_event(action, mapped)
