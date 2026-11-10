@@ -198,11 +198,12 @@ func _make_overlay(title: String) -> Control:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.add_child(center)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(540, 0)
+	scroll.custom_minimum_size = Vector2(640, 540)
 	scroll.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	center.add_child(scroll)
 	var content := VBoxContainer.new()
-	content.custom_minimum_size.x = 500
+	content.custom_minimum_size.x = 600
 	content.add_theme_constant_override("separation", 10)
 	scroll.add_child(content)
 	var heading := Label.new()
