@@ -57,7 +57,7 @@ That menu screenshot is from before the latest entry. **Mountain Night** is in t
 
 ### Mountain
 
-`scenes/test_mountain.tscn`. A 330 m descent inspired by Akina, with five tight hairpins, short curved links and 27 m of elevation loss. Both versions use the same editable `Path3D`. The Mountain speed multiplier is 1.5×.
+`scenes/test_mountain.tscn`. A 330 m descent inspired by Akina, with five tight hairpins, short curved links and 27 m of elevation loss. Both versions use the same editable `Path3D`. The Mountain speed multiplier is 1.5×. Steering builds progressively on both mountain tracks, so short taps make smaller corrections and holding the key still reaches full steering.
 
 - Terrain, asphalt, concrete lots, start and finish arches
 - W-beam guardrails, posts, and reflectors. The collider is still the wall

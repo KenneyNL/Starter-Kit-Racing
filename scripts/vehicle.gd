@@ -48,8 +48,10 @@ var current_steer_angle: float = 0.0
 @onready var engine_sound: AudioStreamPlayer3D = $Container/EngineSound
 @onready var impact_sound: AudioStreamPlayer3D = $Container/ImpactSound
 
-## Moltiplica la spinta del veicolo (1.0 = velocita' originale). Lo imposta ogni mappa.
+## Moltiplicatore della velocita' massima su questa mappa.
 @export var speed_multiplier: float = 1.0
+## Secondi per passare dallo sterzo neutro al massimo. Zero = risposta diretta.
+@export_range(0.0, 1.0, 0.01) var steering_ramp_time: float = 0.0
 
 @export_group("Skid marks")
 ## Lascia sull'asfalto i segni delle gomme posteriori durante il drift.
@@ -139,7 +141,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _drive_on_ground(delta: float, normal: Vector3) -> void:
-	input.x = Input.get_axis("left", "right")
+	input.x = _read_steering(delta)
 	input.z = Input.get_axis("back", "forward")
 
 	# The sphere sets the direction of travel. The body can yaw past that direction
@@ -181,6 +183,18 @@ func _drive_on_ground(delta: float, normal: Vector3) -> void:
 	vehicle_model.global_basis = Basis(normal.cross(body_forward), normal, body_forward)
 	linear_speed = clampf(next_velocity.dot(forward) / top_speed, -1.0, 1.0)
 	acceleration = lerpf(acceleration, linear_speed, 1.0 - exp(-5.0 * delta))
+
+func _read_steering(delta: float) -> float:
+	var target := Input.get_axis("left", "right")
+	if steering_ramp_time <= 0.0:
+		return target
+
+	# Start a countersteer from neutral and unwind faster on release so that
+	# softening turn-in does not delay a correction.
+	var current := 0.0 if input.x * target < 0.0 else input.x
+	var ramp := steering_ramp_time if absf(target) > absf(current) else steering_ramp_time * 0.5
+	return move_toward(current, target, delta / ramp)
+
 
 # Body collision
 # La fisica usa solo la sfera (raggio 0.5) sotto l'auto, ma il corpo e' lungo oltre 3 m.
