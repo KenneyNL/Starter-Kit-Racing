@@ -56,5 +56,6 @@ If you redistribute a build, keep this file with the game. The Suno soundtrack i
 
 ## Effects and sprites
 
-- Drift smoke: `sprites/smoke.png`.
+- Drift smoke: original inked sprites in `sprites/drift-smoke-ink.svg`.
+- Original kit smoke texture: `sprites/smoke.png`.
 - Spectators at the start: pixel art generated at runtime in `scripts/spectators.gd`, not an external asset.
