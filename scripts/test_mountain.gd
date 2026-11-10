@@ -5,6 +5,8 @@ extends Node3D
 # Non usa main.tscn ne' la GridMap. Tasto R = ricomincia.
 
 const PAUSE_MENU := preload("res://scripts/pause_menu.gd")
+const GRAPHICS := preload("res://scripts/graphics_settings.gd")
+const PROGRESSION := preload("res://scripts/progression.gd")
 const MountainRoad := preload("res://scripts/mountain_road.gd")
 const VEHICLE_SCENE := preload("res://scenes/vehicle_selectable.tscn")
 const VIEW_SCRIPT := preload("res://scripts/view.gd")
@@ -78,17 +80,20 @@ func _ready() -> void:
 	road.path = path
 	add_child(road)
 	road.enable_vegetation = enable_vegetation
-	road.tree_density = tree_density
+	var settings := GRAPHICS.load_settings()
+	var vegetation_multiplier := [0.35, 0.7, 1.0][int(settings.get("vegetation", 2))]
+	road.tree_density = tree_density * vegetation_multiplier
 	road.min_tree_road_distance = min_tree_road_distance
 	road.min_tree_spacing = min_tree_spacing
 	road.max_tree_slope = max_tree_slope
 	road.vegetation_seed = vegetation_seed
 	road.enable_nature_kit = enable_nature_kit
-	road.nature_density = nature_density
+	road.nature_density = nature_density * vegetation_multiplier
 	road.reflector_glow = reflector_glow
 	road.finish_reached.connect(_on_finish_reached)
 	road.build()
 	_make_spectators()
+	GRAPHICS.apply_world(settings, self)
 	_make_vehicle_and_camera()
 	_prepare_start_sequence()
 	_start_sequence.call_deferred()
@@ -297,6 +302,7 @@ func _finish_run() -> void:
 		return
 	racing = false
 	var ranking := LEADERBOARD.record_run(leaderboard_id, vehicle.selected_vehicle_id, race_time, bar_time, impacts)
+	PROGRESSION.record(leaderboard_id, vehicle.selected_vehicle_id, race_time, int(ranking.get("score", 0)))
 	var summary = RACE_SUMMARY.new()
 	summary.name = "RaceSummary"
 	add_child(summary)
