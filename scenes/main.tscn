@@ -11,14 +11,14 @@
 [ext_resource type="PackedScene" path="res://scenes/drift_bar.tscn" id="13_driftbar"]
 [ext_resource type="PackedScene" path="res://scenes/now_playing_banner.tscn" id="14_banner"]
 
+[ext_resource type="Script" path="res://scripts/circuit_pause.gd" id="15_pause"]
+
 [sub_resource type="BoxShape3D" id="BoxShape3D_ya4ey"]
 size = Vector3(107, 0, 118)
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_tipki"]
 friction = 0.0
 bounce = 0.1
-
-[ext_resource type="Script" path="res://scripts/circuit_pause.gd" id="15_pause"]
 
 [node name="Main" type="Node3D" unique_id=1145999287]
 script = ExtResource("15_pause")
