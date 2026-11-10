@@ -35,7 +35,9 @@ Keyboard, arrow keys, and a gamepad (left stick and triggers).
 | <kbd>R</kbd> | Restart the descent. On the results screen: **Retry** |
 | <kbd>Esc</kbd> | From the results screen, return to the menu |
 
-The **Drift Bar** at the top fills with slip angle: six segments, from about 10° to 42°. It rises immediately and steps down one segment at a time.
+Hold the throttle and steer into a bend to start a drift. Keep steering to hold the slide and release steering to straighten the car. The steering assist eases speed in tighter turns. Use the brake for slower entries.
+
+The **Drift Bar** shows six levels of slip angle, from about 10° to 42°. Hitting a wall or obstacle empties the bar and turns it red until 0.85 seconds after contact ends.
 
 ## Tracks
 
@@ -55,14 +57,19 @@ That menu screenshot is from before the latest entry. **Mountain Night** is in t
 
 ### Mountain
 
-`scenes/test_mountain.tscn`. A descent built at runtime from a `Path3D`: the first point is the start, the last point is the finish. The car runs at 1.5× the circuit speed.
+`scenes/test_mountain.tscn`. A 330 m descent inspired by Akina, with five tight hairpins, short curved links and 27 m of elevation loss. Both versions use the same editable `Path3D`. The Mountain speed multiplier is 1.5×.
 
 - Terrain, asphalt, concrete lots, start and finish arches
 - W-beam guardrails, posts, and reflectors. The collider is still the wall
 - Hood and tail collide with walls, not only the physics sphere under the car
 - The original kit trees, plus the **Kenney Nature Kit**: pines, bushes, grass, flowers, logs, and rocks on the inside of hairpins. Props near the road have colliders
 - Pixel-art spectators at the start, raising their arms
-- At the finish the game pauses: lap time, and for each Drift Bar level the share of the run spent at that angle. **Retry** reloads the scene, **Menu** goes back
+- Five checkpoints must be crossed in order before the finish. The results show the time, the percentage at each drift level, the number of impacts and the local top ten.
+- Mountain and Mountain Night keep separate local rankings. Each finished run is saved in `user://mountain_leaderboards.cfg`. **Retry** reloads the race and **Menu** returns to the main menu.
+
+#### Scoring
+
+Each level's share of the full race is weighted by its level divided by six. The sum is the weighted drift share between 0 and 1. The score starts at `2500 + 7500 × weighted drift share`, then applies a time multiplier of `60 / (30 + race seconds)`. Each impact costs 450 points and disables drift credit while the bar is red. Scores are rounded before the impact deduction and bottom out at zero. Ties favor fewer impacts, then a shorter time.
 
 ### Mountain Night
 

@@ -8,6 +8,8 @@ extends Node3D
 ## Emesso una sola volta quando il veicolo (la sfera) attraversa il traguardo.
 signal finish_reached(body: Node3D)
 
+const CHECKPOINT_COUNT := 5
+
 ## Modello del tile traguardo delle mappe a tile: da qui si estrae solo l'arco.
 const GATE_SCENE := preload("res://models/track-finish.glb")
 
@@ -29,12 +31,12 @@ const GATE_SCENE := preload("res://models/track-finish.glb")
 @export var road_friction: float = 1.0
 
 @export_group("Terreno")
-@export var terrain_cell: float = 4.0
+@export var terrain_cell: float = 2.0
 @export var terrain_margin: float = 60.0
 @export var shoulder: float = 2.0
 @export var blend_width: float = 8.0
 @export var fall_slope: float = 0.6
-@export var bed_depth: float = 0.2
+@export var bed_depth: float = 0.38
 @export var skirt_step: int = 3
 
 @export_group("Percorso di prova")
@@ -58,7 +60,7 @@ const GATE_SCENE := preload("res://models/track-finish.glb")
 ## Piazzale di cemento (stile parcheggio) dietro la partenza e oltre il traguardo.
 @export var enable_lots: bool = true
 ## Lato del piazzale quadrato (metri).
-@export var lot_size: float = 32.0
+@export var lot_size: float = 22.0
 ## Spessore visibile del bordo del piazzale sotto il piano (metri).
 @export var lot_skirt: float = 3.0
 @export var lot_color := Color(0.62, 0.62, 0.60)
@@ -141,6 +143,7 @@ var centerline: PackedVector3Array = PackedVector3Array()
 var start_transform := Transform3D.IDENTITY
 var finish_transform := Transform3D.IDENTITY
 var _finished := false
+var _next_checkpoint := 0
 ## Piazzali: origine (punto della strada), dir (verso l'esterno), side (laterale).
 var _lots: Array[Dictionary] = []
 
@@ -159,6 +162,7 @@ var _terrain_heights := PackedFloat32Array()
 func build() -> void:
 	var t0 := Time.get_ticks_msec()
 	_finished = false
+	_next_checkpoint = 0
 	if path != null:
 		centerline = _centerline_from_path()
 	if centerline.size() < 2:
@@ -173,7 +177,7 @@ func build() -> void:
 	_build_road()
 	_build_lots()
 	_build_rails()
-	_build_finish_area()
+	_build_timing_gates()
 	if enable_gates:
 		_build_gates()
 	if enable_vegetation:
@@ -475,13 +479,14 @@ func _build_road() -> void:
 		_quad(asphalt, l[i], l[i + 1], l[i + 1] + down, l[i] + down, -s, asphalt_color)
 		_quad(asphalt, r[i], r[i + 1], r[i + 1] + down, r[i] + down, s, asphalt_color)
 		_quad(flat, pl[i], pl[i + 1], pr[i + 1], pr[i], Vector3.UP, asphalt_color)
-		if i % 8 < 4:
-			# linea di mezzeria tratteggiata (solo visiva, niente collider: niente gradini)
-			var lift := Vector3(0.0, 0.02, 0.0)
-			var a := centerline[i] + vis + lift
-			var b := centerline[i + 1] + vis + lift
-			var m := s * 0.08
-			_quad(marks, a - m, b - m, b + m, a + m, Vector3.UP, line_color)
+		# Amber center line and white edge lines to mark the narrow pass.
+		var lift := Vector3(0.0, 0.02, 0.0)
+		var a := centerline[i] + vis + lift
+		var b := centerline[i + 1] + vis + lift
+		var next_side := _side(i + 1)
+		_road_line(marks, a, b, s, next_side, 0.0, 0.08, Color(0.94, 0.64, 0.25))
+		_road_line(marks, a, b, s, next_side, hw - 0.16, 0.045, line_color)
+		_road_line(marks, a, b, s, next_side, -hw + 0.16, 0.045, line_color)
 	# partenza: striscia verde; traguardo: scacchiera
 	_checker(marks, mini(1, n - 1), 0.8, 1, 1, Color(0.2, 0.75, 0.3), Color(0.2, 0.75, 0.3), 0.02)
 	_checker(marks, maxi(n - 2, 0), 2.0, 8, 2, Color.WHITE, Color(0.08, 0.08, 0.08), 0.025)
@@ -491,6 +496,12 @@ func _build_road() -> void:
 	_add_visual(asphalt.commit(), "Road")
 	_add_visual(marks.commit(), "RoadMarks")
 	_add_collider(flat.commit(), "Road", road_friction)
+
+
+func _road_line(st: SurfaceTool, a: Vector3, b: Vector3, side: Vector3, next_side: Vector3, offset: float, half_width: float, color: Color) -> void:
+	var low := offset - half_width
+	var high := offset + half_width
+	_quad(st, a + side * low, b + next_side * low, b + next_side * high, a + side * high, Vector3.UP, color)
 
 
 # Griglia di celle (cols x rows) sulla carreggiata, centrata nel campione i e lunga "length" metri.
@@ -509,28 +520,40 @@ func _checker(st: SurfaceTool, i: int, length: float, cols: int, rows: int, col_
 			_quad(st, c0 + t * a0 + s * l0, c0 + t * a1 + s * l0, c0 + t * a1 + s * l1, c0 + t * a0 + s * l1, Vector3.UP, col)
 
 
-# Zona invisibile sul traguardo: rileva la sfera del veicolo (layer 4 = valore 8).
-func _build_finish_area() -> void:
-	var i := maxi(centerline.size() - 2, 0)
+# The invisible gates enforce an ordered run through the course before the finish.
+func _build_timing_gates() -> void:
+	var finish_index := centerline.size() - 2
+	for checkpoint in CHECKPOINT_COUNT:
+		var index := roundi(float(finish_index) * (checkpoint + 1) / (CHECKPOINT_COUNT + 1))
+		_add_timing_gate(index, checkpoint)
+	_add_timing_gate(finish_index, CHECKPOINT_COUNT)
+
+
+func _add_timing_gate(index: int, checkpoint: int) -> void:
 	var area := Area3D.new()
-	area.name = "FinishArea"
+	area.name = "FinishArea" if checkpoint == CHECKPOINT_COUNT else "Checkpoint%d" % (checkpoint + 1)
 	area.collision_layer = 0
 	area.collision_mask = 8
-	area.transform = Transform3D(basis_at(i), centerline[i] + Vector3(0.0, 2.0, 0.0))
+	var basis := basis_at(index)
+	area.transform = Transform3D(basis, centerline[index] + Vector3(0.0, 1.25, 0.0))
 	var cs := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(road_width + 2.0, 4.0, 1.0)
+	box.size = Vector3(road_width + 0.5, 2.8, 1.25)
 	cs.shape = box
 	area.add_child(cs)
-	area.body_entered.connect(_on_finish_body_entered)
+	area.body_entered.connect(_on_timing_gate_entered.bind(checkpoint, basis.z))
 	add_child(area)
 
 
-func _on_finish_body_entered(body: Node3D) -> void:
-	if _finished or not (body is RigidBody3D):
+func _on_timing_gate_entered(body: Node3D, checkpoint: int, forward: Vector3) -> void:
+	if _finished or checkpoint != _next_checkpoint or not (body is RigidBody3D):
 		return
-	_finished = true
-	finish_reached.emit(body)
+	if body.linear_velocity.dot(forward) <= 0.0:
+		return
+	_next_checkpoint += 1
+	if checkpoint == CHECKPOINT_COUNT:
+		_finished = true
+		finish_reached.emit(body)
 
 
 # Archi di partenza e arrivo: stessa posizione delle strisce (partenza campione 1, traguardo

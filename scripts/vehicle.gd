@@ -1,5 +1,12 @@
 class_name Vehicle extends Node3D
 
+signal obstacle_hit
+
+const MIN_DRIFT_ANGLE := 10.0
+const MAX_DRIFT_ANGLE := 75.0
+const COLLISION_LOCKOUT := 0.85
+const TOP_SPEED := 10.5
+
 # Nodes
 
 @onready var sphere: RigidBody3D = $Sphere
@@ -62,21 +69,21 @@ var current_steer_angle: float = 0.0
 var input: Vector3
 var _body_probes: Array[Vector3] = []
 var _body_probes_ready: bool = false
-var normal: Vector3
 
 var acceleration: float
-var angular_speed: float
+var _steering_rate: float
+var _drift_yaw: float
 var linear_speed: float
 
 var colliding: bool
 
-# True while the drift smoke is being emitted (read by the Drift Bar HUD)
+# Shared by smoke, skid marks and drift scoring.
 var is_drifting: bool = false
 ## Slip angle in degrees between heading and motion direction on the vehicle's plane
 var drift_angle: float = 0.0
 
 var linear_velocity: Vector3
-var prev_position: Vector3
+var collision_lockout: float
 
 var calculated_lean: float
 
@@ -105,70 +112,75 @@ func _store_wheel_base_rotations():
 		if wheel != null:
 			wheel_base_quats[wheel] = wheel.quaternion
 
-func _physics_process(delta):
-
-	handle_input(delta)
-
-	var direction = sign(linear_speed)
-	if direction == 0: direction = sign(input.z) if abs(input.z) > 0.1 else 1
-
-	# Steering authority must come from actual movement. The previous 0.2
-	# minimum allowed the car to pivot in place while stationary.
-	var steering_grip := smoothstep(0.02, 0.20, absf(linear_speed))
-
-	var target_angular = -input.x * steering_grip * 4 * direction
-	angular_speed = lerp(angular_speed, target_angular, delta * 4)
-
-	vehicle_model.rotate_y(angular_speed * delta)
-
-	# Ground alignment
-
-	if raycast.is_colliding():
-		if !colliding:
-			if vehicle_body != null: vehicle_body.position = Vector3(0, 0.1, 0) # Bounce
-			input.z = 0
-
-		normal = raycast.get_collision_normal()
-
-		# Orient model to colliding normal
-
-		if normal.dot(vehicle_model.global_basis.y) > 0.5:
-			var xform = align_with_y(vehicle_model.global_transform, normal)
-			vehicle_model.global_transform = vehicle_model.global_transform.interpolate_with(xform, 0.2).orthonormalized()
+func _physics_process(delta: float) -> void:
+	collision_lockout = maxf(collision_lockout - delta, 0.0)
+	var contact := _sphere_hits_obstacle()
+	if body_collision and _resolve_body_overlap():
+		contact = true
+	if contact:
+		_register_collision()
 
 	colliding = raycast.is_colliding()
-
-	var target_speed = input.z
-
-	if (target_speed < 0 and linear_speed > 0.01):
-		linear_speed = lerp(linear_speed, 0.0, delta * 8)
-	else:
-		if (target_speed < 0):
-			linear_speed = lerp(linear_speed, target_speed / 2, delta * 2)
+	if colliding:
+		var ground_normal := raycast.get_collision_normal()
+		if ground_normal.y > 0.6:
+			_drive_on_ground(delta, ground_normal)
 		else:
-			linear_speed = lerp(linear_speed, target_speed, delta * 6)
-
-	acceleration = lerpf(acceleration, linear_speed + (abs(sphere.angular_velocity.length() * linear_speed) / (100 * speed_multiplier)), delta * 1)
-
-	if body_collision:
-		_resolve_body_overlap()
-
-	# Match vehicle model to physics sphere
+			colliding = false
 
 	vehicle_model.position = sphere.position - Vector3(0, 0.65, 0)
 	raycast.position = sphere.position
-
-	# Calculate vehicle model linear velocity
-
-	linear_velocity = (vehicle_model.position - prev_position) / delta
-	prev_position = vehicle_model.position
-
-	# Visual and audio effects
+	linear_velocity = sphere.linear_velocity
 
 	effect_engine(delta)
 	effect_body(delta)
 	effect_wheels(delta)
 	effect_trails()
+
+
+func _drive_on_ground(delta: float, normal: Vector3) -> void:
+	input.x = Input.get_axis("left", "right")
+	input.z = Input.get_axis("back", "forward")
+
+	# The sphere sets the direction of travel. The body can yaw past that direction
+	# while a turn is held, then smoothly unwind when steering is released.
+	var forward := vehicle_model.global_basis.z.slide(normal).normalized().rotated(normal, -_drift_yaw)
+	var velocity := sphere.linear_velocity.slide(normal)
+	var speed := velocity.length()
+	var direction := -1.0 if velocity.dot(forward) < -0.15 else 1.0
+	var steering_grip := smoothstep(0.2, 3.0, speed)
+	var steering_rate := lerpf(2.35, 1.48, smoothstep(3.0, 16.0, speed))
+	var target_rate := -input.x * direction * steering_grip * steering_rate
+	_steering_rate = lerpf(_steering_rate, target_rate, 1.0 - exp(-13.0 * delta))
+	forward = forward.rotated(normal, _steering_rate * steering_grip * delta)
+
+	var top_speed := TOP_SPEED * speed_multiplier
+	# Ease speed on a tight turn and brake before switching drive direction.
+	var speed_limit := 0.32 if input.z < 0.0 else lerpf(1.0, 0.72, absf(input.x))
+	var target_speed := input.z * top_speed * speed_limit
+	var opposing_throttle := input.z * direction < 0.0 and speed > 0.45
+	if opposing_throttle:
+		target_speed = 0.0
+	var accel := 8.5 if absf(input.z) > 0.05 else 4.2
+	if opposing_throttle:
+		accel = 17.0
+	var drive_speed := move_toward(velocity.dot(forward), target_speed, accel * delta)
+	var next_velocity := velocity.move_toward(forward * drive_speed, 40.0 * delta)
+	sphere.linear_velocity = next_velocity + normal * minf(sphere.linear_velocity.dot(normal), 0.0)
+	sphere.angular_velocity = normal.cross(next_velocity) / 0.5
+
+	var target_yaw := 0.0
+	if direction > 0.0 and collision_lockout <= 0.0:
+		var speed_factor := smoothstep(2.5, 8.0, speed)
+		var turn_factor := smoothstep(0.13, 0.84, absf(input.x))
+		var throttle_factor := lerpf(0.67, 1.0, maxf(input.z, 0.0))
+		target_yaw = -signf(input.x) * deg_to_rad(46.0) * speed_factor * turn_factor * throttle_factor
+	var yaw_response := 9.0 if absf(input.x) > 0.13 else 4.5
+	_drift_yaw = lerpf(_drift_yaw, target_yaw, 1.0 - exp(-yaw_response * delta))
+	var body_forward := forward.rotated(normal, _drift_yaw)
+	vehicle_model.global_basis = Basis(normal.cross(body_forward), normal, body_forward)
+	linear_speed = clampf(next_velocity.dot(forward) / top_speed, -1.0, 1.0)
+	acceleration = lerpf(acceleration, linear_speed, 1.0 - exp(-5.0 * delta))
 
 # Body collision
 # La fisica usa solo la sfera (raggio 0.5) sotto l'auto, ma il corpo e' lungo oltre 3 m.
@@ -202,11 +214,11 @@ func _compute_body_probes():
 			Vector3(minp.x, 0, 0), Vector3(maxp.x, 0, 0)]:
 		_body_probes.append(p)
 
-func _resolve_body_overlap():
+func _resolve_body_overlap() -> bool:
 	if !_body_probes_ready:
 		_compute_body_probes()
 	if _body_probes.is_empty():
-		return
+		return false
 
 	var space := get_world_3d().direct_space_state
 	var center := sphere.global_position
@@ -229,21 +241,35 @@ func _resolve_body_overlap():
 			worst_depth = depth
 			worst_normal = n
 
-	if worst_depth > 0.0:
-		sphere.global_position += worst_normal * (worst_depth + body_collision_margin)
-		var into_wall := sphere.linear_velocity.dot(worst_normal)
-		if into_wall < 0.0:
-			sphere.linear_velocity -= worst_normal * into_wall
+	if worst_depth <= 0.0:
+		return false
+	sphere.global_position += worst_normal * (worst_depth + body_collision_margin)
+	var into_wall := sphere.linear_velocity.dot(worst_normal)
+	if into_wall < 0.0:
+		sphere.linear_velocity -= worst_normal * into_wall
+	return true
 
-# Handle input when vehicle is colliding with ground
 
-func handle_input(delta):
+func _sphere_hits_obstacle() -> bool:
+	var state := PhysicsServer3D.body_get_direct_state(sphere.get_rid())
+	if state == null:
+		return false
+	for i in state.get_contact_count():
+		# A rolling contact with the road has an upward normal.
+		if state.get_contact_local_normal(i).y < 0.6:
+			return true
+	return false
 
-	if raycast.is_colliding():
-		input.x = Input.get_axis("left", "right")
-		input.z = Input.get_axis("back", "forward")
 
-	sphere.angular_velocity += vehicle_model.get_global_transform().basis.x * (linear_speed * 100 * speed_multiplier) * delta
+func _register_collision() -> void:
+	var new_impact := collision_lockout <= 0.0
+	collision_lockout = COLLISION_LOCKOUT
+	if new_impact:
+		obstacle_hit.emit()
+		var speed := linear_velocity.length()
+		impact_sound.volume_db = clampf(remap(speed, 0.0, 8.0, -20.0, 0.0), -20.0, 0.0)
+		impact_sound.play()
+
 
 func effect_body(delta):
 	
@@ -306,52 +332,20 @@ func effect_engine(delta):
 
 # Show trails (and play skid sound)
 
-func effect_trails():
+func effect_trails() -> void:
+	var planar_velocity := linear_velocity.slide(vehicle_model.global_basis.y)
+	drift_angle = 0.0
+	if colliding and collision_lockout <= 0.0 and linear_speed > 0.0 and planar_velocity.length() >= 2.5:
+		drift_angle = rad_to_deg(vehicle_model.global_basis.z.angle_to(planar_velocity))
+		if drift_angle > MAX_DRIFT_ANGLE:
+			drift_angle = 0.0
+	is_drifting = drift_angle >= MIN_DRIFT_ANGLE
 
-	# Calculate slip angle on the vehicle's local plane
-	# The vehicle's forward orientation in this model is +Z (see tools/validate_mountain.gd:54)
-	var forward_dir: Vector3 = vehicle_model.global_basis.z
-	var normal_up: Vector3 = vehicle_model.global_basis.y
-	var vel_on_plane: Vector3 = linear_velocity - normal_up * linear_velocity.dot(normal_up)
-	var speed: float = vel_on_plane.length()
-	if speed > 1.5:
-		# If going in reverse (linear_speed < 0), heading is -forward_dir
-		var drive_dir: Vector3 = forward_dir if linear_speed >= 0 else -forward_dir
-		var dot_val: float = clampf(drive_dir.dot(vel_on_plane.normalized()), -1.0, 1.0)
-		drift_angle = rad_to_deg(acos(dot_val))
-	else:
-		drift_angle = 0.0
+	if trail_left != null: trail_left.emitting = is_drifting
+	if trail_right != null: trail_right.emitting = is_drifting
 
-	var drift_intensity = abs(linear_speed - acceleration) + (abs(calculated_lean) * 2.0)
-	var should_emit = drift_intensity > 0.25
-
-	is_drifting = should_emit
-
-	if trail_left != null: trail_left.emitting = should_emit
-	if trail_right != null: trail_right.emitting = should_emit
-
-	var target_volume = -80.0
-	if should_emit: target_volume = remap(clamp(drift_intensity, 0.25, 2.0), 0.25, 2.0, -10.0, 0.0)
-
-	screech_sound.pitch_scale = lerp(screech_sound.pitch_scale, clamp(abs(linear_speed), 1.0, 3.0), 0.1)
-	screech_sound.volume_db = lerp(screech_sound.volume_db, target_volume, 10.0 * get_physics_process_delta_time())
-
-# Align vehicle with normal
-
-func align_with_y(xform, new_y):
-
-	xform.basis.y = new_y
-	xform.basis.x = -xform.basis.z.cross(new_y)
-	xform.basis = xform.basis.orthonormalized()
-	return xform
-
-# Detect collisions and play impact sound
-
-func _on_sphere_body_entered(_body: Node) -> void:
-	
-	if vehicle_body == null: return
-	
-	if not impact_sound.playing:
-		var impact_velocity := absf(linear_velocity.dot(vehicle_body.global_basis.z))
-		impact_sound.volume_db = clampf(remap(impact_velocity, 0.0, 6.0, -20.0, 0.0), -20.0, 0.0)
-		impact_sound.play()
+	var target_volume := -80.0
+	if is_drifting:
+		target_volume = remap(clampf(drift_angle, MIN_DRIFT_ANGLE, 48.0), MIN_DRIFT_ANGLE, 48.0, -14.0, 0.0)
+	screech_sound.pitch_scale = lerpf(screech_sound.pitch_scale, 1.0 + 0.5 * absf(linear_speed), 0.1)
+	screech_sound.volume_db = lerpf(screech_sound.volume_db, target_volume, 10.0 * get_physics_process_delta_time())

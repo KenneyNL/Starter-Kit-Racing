@@ -11,6 +11,7 @@ const FONT := preload("res://assets/kenney_ui-pack-space-expansion/Font/Kenney F
 const BUTTON_NORMAL := preload("res://assets/ui/button_normal.png")
 const BUTTON_ACTIVE := preload("res://assets/ui/button_active.png")
 const CURSOR := preload("res://assets/ui/cursor_h.png")
+const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
 const MENU_SCENE := "res://scenes/menu.tscn"
 const TEXT_COLOR := Color(0.2, 0.24, 0.35)   # stesso colore del testo della Drift Bar
 
@@ -18,8 +19,8 @@ var retry_button: Button
 
 
 # time_s: durata della gara in secondi.
-# bar_time[n]: secondi in cui la Drift Bar mostrava n segmenti pieni (n = 0 .. DriftBar.SEGMENTS).
-func show_results(time_s: float, bar_time: PackedFloat32Array) -> void:
+# bar_time[n]: secondi di derapata effettiva al livello n (n = 0 .. DriftBar.SEGMENTS).
+func show_results(time_s: float, bar_time: PackedFloat32Array, impacts: int, ranking: Dictionary) -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	layer = 10
 	var total := 0.0
@@ -59,9 +60,17 @@ func show_results(time_s: float, bar_time: PackedFloat32Array) -> void:
 	panel.add_child(box)
 
 	box.add_child(_label("FINISH", 44))
-	box.add_child(_label("TIME  " + format_time(time_s), 30))
+	box.add_child(_label("%d PTS   /   %s" % [ranking.score, format_time(time_s)], 30))
 	box.add_child(HSeparator.new())
-	box.add_child(_label("DRIFT TIME PER BAR", 20))
+
+	var columns := HBoxContainer.new()
+	columns.add_theme_constant_override("separation", 36)
+	box.add_child(columns)
+
+	var stats := VBoxContainer.new()
+	stats.add_theme_constant_override("separation", 6)
+	columns.add_child(stats)
+	stats.add_child(_label("DRIFT TIME PER BAR", 20))
 
 	for level in range(1, DriftBar.SEGMENTS + 1):
 		var row := HBoxContainer.new()
@@ -80,10 +89,12 @@ func show_results(time_s: float, bar_time: PackedFloat32Array) -> void:
 		var pct := _label("%.1f%%" % (100.0 * bar_time[level] / total), 22, HORIZONTAL_ALIGNMENT_RIGHT)
 		pct.custom_minimum_size = Vector2(96, 0)
 		row.add_child(pct)
-		box.add_child(row)
+		stats.add_child(row)
 
-	box.add_child(HSeparator.new())
-	box.add_child(_label("TOTAL DRIFT  %.1f%% OF THE RUN" % (100.0 * drift_total / total), 22))
+	stats.add_child(_label("TOTAL DRIFT  %.1f%%" % (100.0 * drift_total / total), 20))
+	stats.add_child(_label("IMPACTS  %d" % impacts, 20))
+	columns.add_child(VSeparator.new())
+	columns.add_child(_leaderboard(ranking))
 
 	var buttons := HBoxContainer.new()
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -101,6 +112,33 @@ func show_results(time_s: float, bar_time: PackedFloat32Array) -> void:
 
 	get_tree().paused = true
 	retry_button.call_deferred("grab_focus")
+
+
+func _leaderboard(ranking: Dictionary) -> VBoxContainer:
+	var board := VBoxContainer.new()
+	board.custom_minimum_size.x = 440
+	board.add_theme_constant_override("separation", 5)
+	board.add_child(_label("LOCAL LEADERBOARD", 20))
+	var status := "YOUR RANK  #%d" % ranking.rank if ranking.saved else "RESULT NOT SAVED"
+	board.add_child(_label(status, 18))
+	for index in ranking.top.size():
+		var run: Dictionary = ranking.top[index]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		board.add_child(row)
+		var fields := [
+			["%02d" % (index + 1), 26],
+			[VEHICLE_CATALOG.get_label(run.car), 132],
+			[format_time(run.time), 84],
+			["%d PTS" % run.score, 86],
+		]
+		for field in fields:
+			var label := _label(field[0], 16)
+			label.custom_minimum_size.x = field[1]
+			if ranking.saved and index + 1 == ranking.rank:
+				label.add_theme_color_override("font_color", Color(0.08, 0.24, 0.64))
+			row.add_child(label)
+	return board
 
 
 static func format_time(t: float) -> String:

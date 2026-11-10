@@ -9,6 +9,7 @@ const VEHICLE_SCENE := preload("res://scenes/vehicle_selectable.tscn")
 const VIEW_SCRIPT := preload("res://scripts/view.gd")
 const ENVIRONMENT := preload("res://scenes/main-environment.tres")
 const DRIFT_BAR := preload("res://scenes/drift_bar.tscn")
+const LEADERBOARD := preload("res://scripts/race_leaderboard.gd")
 const RACE_SUMMARY := preload("res://scripts/race_summary.gd")
 const NOW_PLAYING_BANNER := preload("res://scenes/now_playing_banner.tscn")
 
@@ -19,6 +20,7 @@ const NOW_PLAYING_BANNER := preload("res://scenes/now_playing_banner.tscn")
 ## Distanza dalla partenza (metri lungo la strada) a cui parte l'auto.
 @export var spawn_distance: float = 4.0
 @export var log_interval: float = 0.5
+@export var leaderboard_id: String = "mountain"
 
 @export_group("Vegetation")
 ## Alberi e cespugli lungo la strada.
@@ -47,11 +49,11 @@ const NOW_PLAYING_BANNER := preload("res://scenes/now_playing_banner.tscn")
 @onready var path: Path3D = $RoadPath
 
 var road: MountainRoad
-var vehicle: Vehicle
+var vehicle: VehicleSelectable
 var race_time: float = 0.0
 var racing: bool = true
-var drift_bar: DriftBar
-## Secondi passati con n segmenti pieni sulla Drift Bar (n = 0 .. DriftBar.SEGMENTS).
+var impacts: int = 0
+## Secondi di derapata effettiva a ogni livello, incluso zero durante una collisione.
 var bar_time: PackedFloat32Array = PackedFloat32Array()
 var log_timer: float = 0.0
 
@@ -134,6 +136,8 @@ func _make_vehicle_and_camera() -> void:
 	vehicle = VEHICLE_SCENE.instantiate()
 	vehicle.speed_multiplier = speed_multiplier
 	vehicle.body_collision = body_collision
+	vehicle.process_physics_priority = -1
+	vehicle.obstacle_hit.connect(_on_obstacle_hit)
 	vehicle.position = road.centerline[idx] + Vector3(0.0, 0.2, 0.0)
 	vehicle.rotation = road.basis_at(idx).get_euler()
 	add_child(vehicle)
@@ -146,7 +150,6 @@ func _make_vehicle_and_camera() -> void:
 	bar.name = "DriftBar"
 	bar.target = vehicle
 	hud.add_child(bar)
-	drift_bar = bar
 
 	# banner "Now Playing" come in main.tscn: legge il titolo dal nodo BGM
 	var banner := NOW_PLAYING_BANNER.instantiate() as NowPlayingBanner
@@ -170,18 +173,25 @@ func _make_vehicle_and_camera() -> void:
 	cam.current = true
 
 
-func _on_finish_reached(_body: Node3D) -> void:
+func _on_obstacle_hit() -> void:
+	if racing:
+		impacts += 1
+
+
+func _on_finish_reached(body: Node3D) -> void:
+	if racing and body == vehicle.sphere:
+		_finish_run.call_deferred()
+
+
+func _finish_run() -> void:
+	if not racing:
+		return
 	racing = false
-	print("[Traguardo] tempo %.2f s | secondi per numero di barre: %s" % [race_time, str(bar_time)])
+	var ranking := LEADERBOARD.record_run(leaderboard_id, vehicle.selected_vehicle_id, race_time, bar_time, impacts)
 	var summary = RACE_SUMMARY.new()
 	summary.name = "RaceSummary"
 	add_child(summary)
-	summary.show_results(race_time, bar_time)
-
-
-func _process(delta: float) -> void:
-	if racing and drift_bar != null:
-		bar_time[clampi(drift_bar.filled_segments, 0, DriftBar.SEGMENTS)] += delta
+	summary.show_results(race_time, bar_time, impacts, ranking)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -194,6 +204,8 @@ func _physics_process(delta: float) -> void:
 		return
 	if racing:
 		race_time += delta
+		var level := DriftBar.level_for_angle(vehicle.drift_angle)
+		bar_time[level] += delta
 	log_timer += delta
 	if log_timer < log_interval:
 		return

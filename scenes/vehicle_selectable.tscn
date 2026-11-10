@@ -50,12 +50,10 @@ physics_material_override = SubResource("PhysicsMaterial_eyo0u")
 gravity_scale = 1.5
 continuous_cd = true
 contact_monitor = true
-max_contacts_reported = 2
+max_contacts_reported = 8
 linear_damp = 0.1
 angular_damp_mode = 1
-angular_damp = 4.0
+angular_damp = 0.0
 
 [node name="CollisionShape" type="CollisionShape3D" parent="Sphere" unique_id=503279956]
 shape = SubResource("SphereShape3D_hhncp")
-
-[connection signal="body_entered" from="Sphere" to="." method="_on_sphere_body_entered"]

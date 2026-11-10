@@ -13,7 +13,7 @@ class_name DriftBar extends MarginContainer
 
 const SEGMENTS := 6
 
-const THRESHOLDS: Array[float] = [10.0, 16.0, 22.0, 28.0, 35.0, 42.0]
+const THRESHOLDS: Array[float] = [Vehicle.MIN_DRIFT_ANGLE, 16.0, 22.0, 28.0, 35.0, 42.0]
 
 @export_group("Properties")
 @export var target: Vehicle
@@ -42,6 +42,8 @@ const THRESHOLDS: Array[float] = [10.0, 16.0, 22.0, 28.0, 35.0, 42.0]
 var segments: Array[TextureRect] = []
 var filled_segments: int = -1
 var decay_timer: float = 0.0
+var _panel_style: StyleBoxTexture
+var _showing_impact := false
 
 func _ready():
 
@@ -51,17 +53,17 @@ func _ready():
 
 	# Glass panel, centered at the top of the screen
 
-	var style := StyleBoxTexture.new()
-	style.texture = panel_texture
-	style.modulate_color = panel_color
-	style.set_texture_margin_all(panel_slice)
-	style.content_margin_left = panel_padding.x
-	style.content_margin_right = panel_padding.x
-	style.content_margin_top = panel_padding.y
-	style.content_margin_bottom = panel_padding.y
+	_panel_style = StyleBoxTexture.new()
+	_panel_style.texture = panel_texture
+	_panel_style.modulate_color = panel_color
+	_panel_style.set_texture_margin_all(panel_slice)
+	_panel_style.content_margin_left = panel_padding.x
+	_panel_style.content_margin_right = panel_padding.x
+	_panel_style.content_margin_top = panel_padding.y
+	_panel_style.content_margin_bottom = panel_padding.y
 
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", _panel_style)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -101,15 +103,19 @@ func _process(delta):
 
 	if target == null: return
 
-	# Determine instant segments from target's drift_angle
-	var angle: float = target.drift_angle
-	var target_filled := 0
-	for i in SEGMENTS:
-		if angle >= THRESHOLDS[i]:
-			target_filled = i + 1
-		else:
-			break
+	var impact := target.collision_lockout > 0.0
+	if impact != _showing_impact:
+		_showing_impact = impact
+		_panel_style.modulate_color = Color(1.0, 0.28, 0.28, 0.95) if impact else panel_color
+		for segment in segments:
+			segment.self_modulate = Color(1.0, 0.32, 0.32) if impact else Color.WHITE
+	if impact:
+		decay_timer = 0.0
+		if filled_segments != 0:
+			_update_segments(0)
+		return
 
+	var target_filled := level_for_angle(target.drift_angle)
 	if target_filled >= filled_segments:
 		# Instant rise
 		decay_timer = decay_delay
@@ -121,6 +127,15 @@ func _process(delta):
 		if decay_timer <= 0.0:
 			decay_timer = 0.08
 			_update_segments(filled_segments - 1)
+
+static func level_for_angle(angle: float) -> int:
+	var level := 0
+	for threshold in THRESHOLDS:
+		if angle < threshold:
+			break
+		level += 1
+	return level
+
 
 # Show the first `filled` segments as "on", the others as "off"
 
