@@ -112,7 +112,9 @@ func _physics_process(delta):
 	var direction = sign(linear_speed)
 	if direction == 0: direction = sign(input.z) if abs(input.z) > 0.1 else 1
 
-	var steering_grip = clamp(abs(linear_speed), 0.2, 1.0)
+	# Steering authority must come from actual movement. The previous 0.2
+	# minimum allowed the car to pivot in place while stationary.
+	var steering_grip := smoothstep(0.02, 0.20, absf(linear_speed))
 
 	var target_angular = -input.x * steering_grip * 4 * direction
 	angular_speed = lerp(angular_speed, target_angular, delta * 4)
