@@ -14,6 +14,7 @@ const CURSOR := preload("res://assets/ui/cursor_h.png")
 const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
 const MENU_SCENE := "res://scenes/menu.tscn"
 const TEXT_COLOR := Color(0.2, 0.24, 0.35)   # stesso colore del testo della Drift Bar
+const RETRY_META := "deja_vu_mountain_retry"
 
 var retry_button: Button
 
@@ -61,6 +62,8 @@ func show_results(time_s: float, bar_time: PackedFloat32Array, impacts: int, ran
 
 	box.add_child(_label("FINISH", 44))
 	box.add_child(_label("%d PTS   /   %s" % [ranking.score, format_time(time_s)], 30))
+	if ranking.saved and int(ranking.rank) <= 3:
+		box.add_child(_podium_banner(int(ranking.rank)))
 	box.add_child(HSeparator.new())
 
 	var columns := HBoxContainer.new()
@@ -141,6 +144,65 @@ func _leaderboard(ranking: Dictionary) -> VBoxContainer:
 	return board
 
 
+func _podium_banner(rank: int) -> PanelContainer:
+	var names := ["GOLD PODIUM", "SILVER PODIUM", "BRONZE PODIUM"]
+	var colors := [
+		Color(0.90, 0.68, 0.16),
+		Color(0.70, 0.73, 0.78),
+		Color(0.72, 0.42, 0.20),
+	]
+	var index := clampi(rank - 1, 0, 2)
+	var style := StyleBoxTexture.new()
+	style.texture = BUTTON_NORMAL
+	style.set_texture_margin_all(6)
+	style.content_margin_left = 18
+	style.content_margin_right = 18
+	style.content_margin_top = 8
+	style.content_margin_bottom = 8
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", style)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	panel.add_child(row)
+
+	var medal := TextureRect.new()
+	medal.texture = _make_medal_texture(colors[index])
+	medal.custom_minimum_size = Vector2(42, 48)
+	medal.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	medal.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	row.add_child(medal)
+
+	var message := _label("%s  •  #%d LOCAL" % [names[index], rank], 22)
+	message.add_theme_color_override("font_color", Color.BLACK)
+	row.add_child(message)
+	return panel
+
+
+func _make_medal_texture(medal_color: Color) -> ImageTexture:
+	var image := Image.create(48, 56, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0, 0, 0, 0))
+	var ribbon := Color(0.12, 0.22, 0.44)
+	for y in range(0, 24):
+		var inset := int(float(y) * 0.18)
+		for x in range(9 + inset, 22):
+			image.set_pixel(x, y, ribbon)
+		for x in range(26, 39 - inset):
+			image.set_pixel(x, y, ribbon)
+	var center := Vector2(24, 34)
+	for y in range(14, 54):
+		for x in range(4, 44):
+			var d := Vector2(x, y).distance_to(center)
+			if d <= 18.0:
+				var col := medal_color.lightened(0.16) if d < 13.5 else medal_color.darkened(0.20)
+				image.set_pixel(x, y, col)
+	for y in range(26, 42):
+		for x in range(19, 29):
+			if abs(x - 24) + abs(y - 34) < 8:
+				image.set_pixel(x, y, medal_color.darkened(0.36))
+	return ImageTexture.create_from_image(image)
+
+
 static func format_time(t: float) -> String:
 	return "%02d:%05.2f" % [int(t / 60.0), fmod(t, 60.0)]
 
@@ -186,6 +248,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _retry() -> void:
 	get_tree().paused = false
+	get_tree().set_meta(RETRY_META, true)
 	get_tree().reload_current_scene()
 
 

@@ -12,6 +12,9 @@ const DRIFT_BAR := preload("res://scenes/drift_bar.tscn")
 const LEADERBOARD := preload("res://scripts/race_leaderboard.gd")
 const RACE_SUMMARY := preload("res://scripts/race_summary.gd")
 const NOW_PLAYING_BANNER := preload("res://scenes/now_playing_banner.tscn")
+const UI_FONT := preload("res://assets/kenney_ui-pack-space-expansion/Font/Kenney Future Narrow.ttf")
+const RETRY_META := "deja_vu_mountain_retry"
+const OVERVIEW_DURATION := 4.0
 
 ## Velocita' del veicolo su questa mappa (1.0 = quella delle mappe a tile).
 @export var speed_multiplier: float = 1.5
@@ -54,6 +57,9 @@ var road: MountainRoad
 var vehicle: VehicleSelectable
 var race_time: float = 0.0
 var racing: bool = true
+var race_active: bool = false
+var chase_camera: Camera3D
+var countdown_layer: CanvasLayer
 var impacts: int = 0
 ## Secondi di derapata effettiva a ogni livello, incluso zero durante una collisione.
 var bar_time: PackedFloat32Array = PackedFloat32Array()
@@ -80,6 +86,8 @@ func _ready() -> void:
 	road.build()
 	_make_spectators()
 	_make_vehicle_and_camera()
+	_prepare_start_sequence()
+	_start_sequence.call_deferred()
 
 
 func _make_world() -> void:
@@ -118,18 +126,24 @@ func _make_world() -> void:
 
 
 func _make_spectators() -> void:
-	var st := road.start_transform
-	var start_pos := st.origin
-	# Direzione della strada (avanti) e laterale
-	var road_dir := st.basis.z
-	var road_side := Vector3(-road_dir.z, 0.0, road_dir.x)
+	_spawn_crowd("StartCrowd", road.start_transform, 18, 1001, -4.0, 10.0)
+	_spawn_crowd("FinishCrowd", road.finish_transform, 16, 2001, -10.0, 5.0)
+
+
+func _spawn_crowd(node_name: String, anchor: Transform3D, crowd_count: int, seed: int,
+		forward_min: float, forward_max: float) -> void:
+	var road_dir := anchor.basis.z.normalized()
+	var road_side := Vector3(-road_dir.z, 0.0, road_dir.x).normalized()
 	var specs := Spectators.new()
-	specs.name = "Spectators"
-	specs.count = 10
-	specs.spread_radius = 14.0
-	specs.min_road_distance = 4.0
+	specs.name = node_name
+	specs.count = crowd_count
+	specs.spread_radius = 12.0
+	specs.min_road_distance = 4.2
+	specs.forward_min = forward_min
+	specs.forward_max = forward_max
+	specs.rng_seed = seed
 	add_child(specs)
-	specs.spawn(start_pos, road_dir, road_side)
+	specs.spawn(anchor.origin, road_dir, road_side)
 
 
 func _make_vehicle_and_camera() -> void:
@@ -169,6 +183,7 @@ func _make_vehicle_and_camera() -> void:
 	view.rotation_degrees = Vector3(-35.0, 45.0, 0.0)
 	view.position = vehicle.position
 	var cam := Camera3D.new()
+	chase_camera = cam
 	cam.name = "Camera"
 	cam.position = Vector3(0.0, 0.0, 16.0)
 	cam.fov = 40.0
@@ -178,13 +193,98 @@ func _make_vehicle_and_camera() -> void:
 	cam.current = true
 
 
+func _prepare_start_sequence() -> void:
+	race_active = false
+	vehicle.sphere.freeze = true
+	vehicle.set_physics_process(false)
+	countdown_layer = CanvasLayer.new()
+	countdown_layer.name = "StartCountdown"
+	countdown_layer.layer = 20
+	add_child(countdown_layer)
+
+
+func _start_sequence() -> void:
+	var skip_overview := bool(get_tree().get_meta(RETRY_META, false))
+	if get_tree().has_meta(RETRY_META):
+		get_tree().remove_meta(RETRY_META)
+	if not skip_overview:
+		await _play_track_overview()
+	chase_camera.current = true
+	await _play_countdown()
+	vehicle.sphere.freeze = false
+	vehicle.set_physics_process(true)
+	race_active = true
+
+
+func _play_track_overview() -> void:
+	if road.centerline.is_empty():
+		return
+	var minp := road.to_global(road.centerline[0])
+	var maxp := minp
+	for p in road.centerline:
+		var gp := road.to_global(p)
+		minp = minp.min(gp)
+		maxp = maxp.max(gp)
+	var center := (minp + maxp) * 0.5
+	var span := maxf(Vector2(maxp.x - minp.x, maxp.z - minp.z).length(), 60.0)
+	var overview := Camera3D.new()
+	overview.name = "TrackOverviewCamera"
+	overview.fov = 48.0
+	overview.far = 900.0
+	add_child(overview)
+	var start_pos := center + Vector3(-span * 0.42, span * 0.55 + 28.0, -span * 0.28)
+	var end_pos := center + Vector3(span * 0.38, span * 0.42 + 22.0, span * 0.32)
+	overview.global_position = start_pos
+	overview.look_at(center, Vector3.UP)
+	overview.current = true
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_method(_update_overview.bind(overview, start_pos, end_pos, center), 0.0, 1.0, OVERVIEW_DURATION)
+	await tween.finished
+	overview.queue_free()
+
+
+func _update_overview(weight: float, camera: Camera3D, start_pos: Vector3, end_pos: Vector3, center: Vector3) -> void:
+	camera.global_position = start_pos.lerp(end_pos, weight)
+	camera.look_at(center, Vector3.UP)
+
+
+func _play_countdown() -> void:
+	var label := Label.new()
+	label.set_anchors_preset(Control.PRESET_CENTER)
+	label.position = Vector2(-100.0, -72.0)
+	label.size = Vector2(200.0, 144.0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_override("font", UI_FONT)
+	label.add_theme_font_size_override("font_size", 88)
+	label.add_theme_color_override("font_color", Color(0.96, 0.96, 0.92))
+	label.add_theme_color_override("font_outline_color", Color(0.06, 0.08, 0.12, 0.95))
+	label.add_theme_constant_override("outline_size", 8)
+	countdown_layer.add_child(label)
+	for n in [3, 2, 1]:
+		label.text = str(n)
+		label.scale = Vector2(1.18, 1.18)
+		var pulse := create_tween()
+		pulse.tween_property(label, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		await get_tree().create_timer(1.0).timeout
+	label.text = "GO!"
+	await get_tree().create_timer(0.45).timeout
+	label.queue_free()
+
+
+func _retry_scene() -> void:
+	get_tree().set_meta(RETRY_META, true)
+	get_tree().reload_current_scene()
+
+
 func _on_obstacle_hit() -> void:
-	if racing:
+	if racing and race_active:
 		impacts += 1
 
 
 func _on_finish_reached(body: Node3D) -> void:
-	if racing and body == vehicle.sphere:
+	if racing and race_active and body == vehicle.sphere:
 		_finish_run.call_deferred()
 
 
@@ -201,13 +301,13 @@ func _finish_run() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_R:
-		get_tree().reload_current_scene()
+		_retry_scene()
 
 
 func _physics_process(delta: float) -> void:
 	if vehicle == null:
 		return
-	if racing:
+	if racing and race_active:
 		race_time += delta
 		var level := DriftBar.level_for_angle(vehicle.drift_angle)
 		bar_time[level] += delta
