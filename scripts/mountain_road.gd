@@ -8,7 +8,7 @@ extends Node3D
 ## Emesso una sola volta quando il veicolo (la sfera) attraversa il traguardo.
 signal finish_reached(body: Node3D)
 
-const CHECKPOINT_COUNT := 5
+const CHECKPOINT_COUNT := 8
 const ROAD_STRIPS := 16
 
 ## Modello del tile traguardo delle mappe a tile: da qui si estrae solo l'arco.

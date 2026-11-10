@@ -9,4 +9,4 @@
 
 [node name="TestMountainNight" instance=ExtResource("1_base")]
 script = ExtResource("2_night")
-leaderboard_id = "mountain_night"
+leaderboard_id = "mountain_night_500m"

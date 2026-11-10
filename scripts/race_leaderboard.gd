@@ -1,7 +1,7 @@
 extends RefCounted
 
 const SAVE_PATH := "user://mountain_leaderboards.cfg"
-const TARGET_TIME := 30.0
+const TARGET_TIME := 45.0
 const IMPACT_PENALTY := 450
 
 

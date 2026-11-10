@@ -57,19 +57,19 @@ That menu screenshot is from before the latest entry. **Mountain Night** is in t
 
 ### Mountain
 
-`scenes/test_mountain.tscn`. A 330 m descent inspired by Akina, with five tight hairpins, short curved links and 27 m of elevation loss. Both versions use the same editable `Path3D`. The Mountain speed multiplier is 1.5×. Steering builds progressively on both mountain tracks, so short taps make smaller corrections and holding the key still reaches full steering.
+`scenes/test_mountain.tscn`. A 500 m descent inspired by Akina, with seven tight hairpins, short curved links and 40 m of elevation loss. Both versions use the same editable `Path3D`. The Mountain speed multiplier is 1.5×. Steering builds progressively on both mountain tracks, so short taps make smaller corrections and holding the key still reaches full steering.
 
 - Terrain, asphalt, concrete lots, start and finish arches
 - W-beam guardrails, posts, and reflectors. The collider is still the wall
 - Hood and tail collide with walls, not only the physics sphere under the car
 - The original kit trees, plus the **Kenney Nature Kit**: pines, bushes, grass, flowers, logs, and rocks on the inside of hairpins. Props near the road have colliders
 - Pixel-art spectators at the start, raising their arms
-- Five checkpoints must be crossed in order before the finish. The results show the time, the percentage at each drift level, the number of impacts and the local top ten.
-- Mountain and Mountain Night keep separate local rankings. Each finished run is saved in `user://mountain_leaderboards.cfg`. **Retry** reloads the race and **Menu** returns to the main menu.
+- Eight checkpoints must be crossed in order before the finish. The results show the time, the percentage at each drift level, the number of impacts and the local top ten.
+- Mountain and Mountain Night keep separate local rankings. Each finished run is saved in `user://mountain_leaderboards.cfg`. The 500 m course uses its own rankings and the earlier 330 m results are retained in the save file. **Retry** reloads the race and **Menu** returns to the main menu.
 
 #### Scoring
 
-Each level's share of the full race is weighted by its level divided by six. The sum is the weighted drift share between 0 and 1. The score starts at `2500 + 7500 × weighted drift share`, then applies a time multiplier of `60 / (30 + race seconds)`. Each impact costs 450 points and disables drift credit while the bar is red. Scores are rounded before the impact deduction and bottom out at zero. Ties favor fewer impacts, then a shorter time.
+Each level's share of the full race is weighted by its level divided by six. The sum is the weighted drift share between 0 and 1. The score starts at `2500 + 7500 × weighted drift share`, then applies a time multiplier of `90 / (45 + race seconds)`. Each impact costs 450 points and disables drift credit while the bar is red. Scores are rounded before the impact deduction and bottom out at zero. Ties favor fewer impacts, then a shorter time.
 
 ### Mountain Night
 

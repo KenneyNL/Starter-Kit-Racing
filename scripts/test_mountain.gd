@@ -22,7 +22,7 @@ const NOW_PLAYING_BANNER := preload("res://scenes/now_playing_banner.tscn")
 ## Distanza dalla partenza (metri lungo la strada) a cui parte l'auto.
 @export var spawn_distance: float = 4.0
 @export var log_interval: float = 0.5
-@export var leaderboard_id: String = "mountain"
+@export var leaderboard_id: String = "mountain_500m"
 
 @export_group("Vegetation")
 ## Alberi e cespugli lungo la strada.
