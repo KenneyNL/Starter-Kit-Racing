@@ -318,11 +318,11 @@ func _open_leaderboard() -> void:
 		var best_score := int(profile.get_value(section, "best_score", 0))
 		var medals: Dictionary = profile.get_value(section, "medals", {})
 		var line := Label.new()
-		line.text = "%s  |  BEST %.2f s  |  SCORE %d  |  %s" % [section.to_upper(), best_time, best_score, ", ".join(medals.keys())]
+		line.text = "%s  |  BEST %.2f s  |  SCORE %d  |  %s" % [section.to_upper(), best_time, best_score, str(medals.keys())]
 		content.add_child(line)
 	var achievements: Dictionary = profile.get_value("global", "achievements", {})
 	var achievements_label := Label.new()
-	achievements_label.text = "ACHIEVEMENTS: " + (", ".join(achievements.keys()) if not achievements.is_empty() else "NONE YET")
+	achievements_label.text = "ACHIEVEMENTS: " + (str(achievements.keys()) if not achievements.is_empty() else "NONE YET")
 	content.add_child(achievements_label)
 	var back := _styled_button("BACK")
 	back.pressed.connect(func() -> void:
