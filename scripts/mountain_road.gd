@@ -9,6 +9,7 @@ extends Node3D
 signal finish_reached(body: Node3D)
 
 const CHECKPOINT_COUNT := 5
+const ROAD_STRIPS := 16
 
 ## Modello del tile traguardo delle mappe a tile: da qui si estrae solo l'arco.
 const GATE_SCENE := preload("res://models/track-finish.glb")
@@ -452,33 +453,39 @@ func _build_terrain() -> void:
 func _build_road() -> void:
 	var hw := road_width * 0.5
 	var n := centerline.size()
-	# l/r: bordi dell'asfalto VISIBILE; pl/pr: bordi della superficie FISICA (collider)
+	# The collision surface follows the asphalt mesh at a fixed height offset.
 	var vis := Vector3(0.0, road_lift - asphalt_drop, 0.0)
-	var phys := Vector3(0.0, road_lift, 0.0)
+	var collision_offset := Vector3.UP * asphalt_drop
 	var l := PackedVector3Array()
 	var r := PackedVector3Array()
-	var pl := PackedVector3Array()
-	var pr := PackedVector3Array()
 	for i in n:
 		var s := _side(i)
 		l.append(centerline[i] + vis - s * hw)
 		r.append(centerline[i] + vis + s * hw)
-		pl.append(centerline[i] + phys - s * hw)
-		pr.append(centerline[i] + phys + s * hw)
 	var down := Vector3(0.0, -0.5, 0.0)
 
 	var asphalt := SurfaceTool.new()
 	asphalt.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var marks := SurfaceTool.new()
 	marks.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var flat := SurfaceTool.new()
-	flat.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var collision := SurfaceTool.new()
+	collision.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in n - 1:
 		var s := _side(i)
-		_quad(asphalt, l[i], l[i + 1], r[i + 1], r[i], Vector3.UP, asphalt_color)
+		# A sloped bend twists between cross sections. Use narrow strips so
+		# the diagonal between two triangles does not create a ridge across the lane.
+		for strip in ROAD_STRIPS:
+			var low := float(strip) / ROAD_STRIPS
+			var high := float(strip + 1) / ROAD_STRIPS
+			var a0 := l[i].lerp(r[i], low)
+			var a1 := l[i + 1].lerp(r[i + 1], low)
+			var b1 := l[i + 1].lerp(r[i + 1], high)
+			var b0 := l[i].lerp(r[i], high)
+			_quad(asphalt, a0, a1, b1, b0, Vector3.UP, asphalt_color)
+			_quad(collision, a0 + collision_offset, a1 + collision_offset,
+				b1 + collision_offset, b0 + collision_offset, Vector3.UP, asphalt_color)
 		_quad(asphalt, l[i], l[i + 1], l[i + 1] + down, l[i] + down, -s, asphalt_color)
 		_quad(asphalt, r[i], r[i + 1], r[i + 1] + down, r[i] + down, s, asphalt_color)
-		_quad(flat, pl[i], pl[i + 1], pr[i + 1], pr[i], Vector3.UP, asphalt_color)
 		# Amber center line and white edge lines to mark the narrow pass.
 		var lift := Vector3(0.0, 0.02, 0.0)
 		var a := centerline[i] + vis + lift
@@ -492,10 +499,9 @@ func _build_road() -> void:
 	_checker(marks, maxi(n - 2, 0), 2.0, 8, 2, Color.WHITE, Color(0.08, 0.08, 0.08), 0.025)
 	asphalt.generate_normals()
 	marks.generate_normals()
-	flat.generate_normals()
 	_add_visual(asphalt.commit(), "Road")
 	_add_visual(marks.commit(), "RoadMarks")
-	_add_collider(flat.commit(), "Road", road_friction)
+	_add_collider(collision.commit(), "Road", road_friction)
 
 
 func _road_line(st: SurfaceTool, a: Vector3, b: Vector3, side: Vector3, next_side: Vector3, offset: float, half_width: float, color: Color) -> void:
