@@ -159,12 +159,13 @@ func _make_vehicle_and_camera() -> void:
 	banner.audio_player_path = NodePath("../../BGM")
 	hud.add_child(banner)
 
-	# stessa inquadratura di main.tscn (yaw 45, pitch -35), ma far piu' lontano
+	# Visuale dall'alto orientata verso il prossimo tratto della discesa.
 	var view := Node3D.new()
 	view.name = "View"
 	view.set_script(VIEW_SCRIPT)
 	view.set("target", vehicle)
-	view.rotation_degrees = Vector3(-35.0, 45.0, 0.0)
+	view.set("road_path", path)
+	view.rotation_degrees.x = -35.0
 	view.position = vehicle.position
 	var cam := Camera3D.new()
 	cam.name = "Camera"
