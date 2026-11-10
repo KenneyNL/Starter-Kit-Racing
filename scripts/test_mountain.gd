@@ -239,12 +239,14 @@ func _play_track_overview() -> void:
 	overview.current = true
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	tween.tween_method(func(weight: float) -> void:
-		overview.global_position = start_pos.lerp(end_pos, weight)
-		overview.look_at(center, Vector3.UP)
-	, 0.0, 1.0, OVERVIEW_DURATION)
+	tween.tween_method(_update_overview.bind(overview, start_pos, end_pos, center), 0.0, 1.0, OVERVIEW_DURATION)
 	await tween.finished
 	overview.queue_free()
+
+
+func _update_overview(weight: float, camera: Camera3D, start_pos: Vector3, end_pos: Vector3, center: Vector3) -> void:
+	camera.global_position = start_pos.lerp(end_pos, weight)
+	camera.look_at(center, Vector3.UP)
 
 
 func _play_countdown() -> void:
