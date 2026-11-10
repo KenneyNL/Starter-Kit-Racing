@@ -302,6 +302,28 @@ func _open_leaderboard() -> void:
 				line.add_theme_font_override("font", UI_FONT)
 				line.add_theme_font_size_override("font_size", 18)
 				content.add_child(line)
+	var profile := PROGRESSION.read()
+	var profile_heading := Label.new()
+	profile_heading.text = "DRIVER PROFILE"
+	profile_heading.add_theme_font_override("font", UI_FONT)
+	profile_heading.add_theme_font_size_override("font_size", 24)
+	content.add_child(profile_heading)
+	var total := Label.new()
+	total.text = "COMPLETED RACES: %d   RACE TIME: %.1f MIN" % [int(profile.get_value("global", "total_races", 0)), float(profile.get_value("global", "total_race_seconds", 0.0)) / 60.0]
+	content.add_child(total)
+	for section in profile.get_sections():
+		if section == "global":
+			continue
+		var best_time := float(profile.get_value(section, "best_time", 0.0))
+		var best_score := int(profile.get_value(section, "best_score", 0))
+		var medals: Dictionary = profile.get_value(section, "medals", {})
+		var line := Label.new()
+		line.text = "%s  |  BEST %.2f s  |  SCORE %d  |  %s" % [section.to_upper(), best_time, best_score, ", ".join(medals.keys())]
+		content.add_child(line)
+	var achievements: Dictionary = profile.get_value("global", "achievements", {})
+	var achievements_label := Label.new()
+	achievements_label.text = "ACHIEVEMENTS: " + (", ".join(achievements.keys()) if not achievements.is_empty() else "NONE YET")
+	content.add_child(achievements_label)
 	var back := _styled_button("BACK")
 	back.pressed.connect(func() -> void:
 		_leaderboard_panel.queue_free()
