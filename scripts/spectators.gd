@@ -40,14 +40,17 @@ const HAIR_COLORS: Array[Color] = [
 var _actors: Array[Node3D] = []
 var _left_arms: Array[Node3D] = []
 var _right_arms: Array[Node3D] = []
-var _phases: PackedFloat32Array = PackedFloat32Array()
-var _speeds: PackedFloat32Array = PackedFloat32Array()
-var _amplitudes: PackedFloat32Array = PackedFloat32Array()
+var _anim_progress: PackedFloat32Array = PackedFloat32Array()
+var _anim_duration: PackedFloat32Array = PackedFloat32Array()
+var _anim_from: PackedFloat32Array = PackedFloat32Array()
+var _anim_to: PackedFloat32Array = PackedFloat32Array()
+var _anim_rng := RandomNumberGenerator.new()
 
 
-func spawn(anchor_pos: Vector3, road_dir: Vector3, road_side: Vector3) -> void:
+func spawn(anchor_pos: Vector3, road_dir: Vector3, road_side: Vector3, look_target: Vector3) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = rng_seed
+	_anim_rng.seed = rng_seed + 7919
 	var forward := road_dir.normalized()
 	var side := road_side.normalized()
 
@@ -59,15 +62,24 @@ func spawn(anchor_pos: Vector3, road_dir: Vector3, road_side: Vector3) -> void:
 		var jitter := side * rng.randf_range(-0.35, 0.35)
 		actor.position = anchor_pos + side * lateral + forward * along + jitter
 		actor.position.y = anchor_pos.y
-		actor.rotation.y = atan2(-side_sign * side.x, -side_sign * side.z) + rng.randf_range(-0.24, 0.24)
+		var toward_finish := look_target - actor.position
+		toward_finish.y = 0.0
+		if toward_finish.length_squared() < 0.01:
+			toward_finish = forward
+		toward_finish = toward_finish.normalized()
+		# Il fronte del personaggio e' -Z (la visiera del cappellino sporge in quella direzione).
+		actor.rotation.y = atan2(-toward_finish.x, -toward_finish.z) + rng.randf_range(-0.08, 0.08)
 		actor.scale = Vector3.ONE * rng.randf_range(0.92, 1.08)
 		add_child(actor)
 		_actors.append(actor)
 		_left_arms.append(actor.get_node("Body/LeftArm") as Node3D)
 		_right_arms.append(actor.get_node("Body/RightArm") as Node3D)
-		_phases.append(rng.randf_range(0.0, TAU))
-		_speeds.append(rng.randf_range(1.5, 3.1))
-		_amplitudes.append(rng.randf_range(0.16, 0.42))
+		var initial_lift := rng.randf()
+		_set_arm_lift(_left_arms.size() - 1, initial_lift)
+		_anim_progress.append(rng.randf_range(0.0, 0.85))
+		_anim_duration.append(rng.randf_range(0.65, 1.55))
+		_anim_from.append(initial_lift)
+		_anim_to.append(0.0 if initial_lift > 0.5 else 1.0)
 
 
 func _make_person(rng: RandomNumberGenerator) -> Node3D:
@@ -193,13 +205,30 @@ func _material(color: Color) -> StandardMaterial3D:
 
 
 func _process(delta: float) -> void:
-	var t := Time.get_ticks_msec() * 0.001
 	for i in _actors.size():
-		var wave := sin(t * _speeds[i] + _phases[i])
-		var bob := sin(t * (_speeds[i] * 0.55) + _phases[i]) * 0.018
-		var actor := _actors[i]
-		actor.position.y += (bob - actor.get_meta("last_bob", 0.0))
-		actor.set_meta("last_bob", bob)
-		var amp := _amplitudes[i]
-		_left_arms[i].rotation.z += (-0.22 + wave * amp - _left_arms[i].rotation.z) * minf(delta * 5.0, 1.0)
-		_right_arms[i].rotation.z += (0.22 - wave * amp - _right_arms[i].rotation.z) * minf(delta * 5.0, 1.0)
+		_anim_progress[i] += delta
+		var duration := maxf(_anim_duration[i], 0.01)
+		var t := clampf(_anim_progress[i] / duration, 0.0, 1.0)
+		# Smoothstep: mani chiaramente giu -> su -> giu, senza scatti.
+		var eased := t * t * (3.0 - 2.0 * t)
+		var lift := lerpf(_anim_from[i], _anim_to[i], eased)
+		_set_arm_lift(i, lift)
+
+		if t >= 1.0:
+			_anim_progress[i] = 0.0
+			_anim_from[i] = _anim_to[i]
+			_anim_to[i] = 0.0 if _anim_to[i] > 0.5 else 1.0
+			# Durata diversa ad ogni ciclo: niente effetto sincronizzato anche dopo molti secondi.
+			_anim_duration[i] = _anim_rng.randf_range(0.55, 1.75)
+
+
+func _set_arm_lift(index: int, lift: float) -> void:
+	if index < 0 or index >= _left_arms.size():
+		return
+	var amount := clampf(lift, 0.0, 1.0)
+	var left_down := -0.12
+	var left_up := -2.45
+	var right_down := 0.12
+	var right_up := 2.45
+	_left_arms[index].rotation.z = lerpf(left_down, left_up, amount)
+	_right_arms[index].rotation.z = lerpf(right_down, right_up, amount)
