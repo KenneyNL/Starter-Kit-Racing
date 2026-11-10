@@ -4,6 +4,7 @@ extends Node3D
 # Il primo punto del Path3D e' la partenza, l'ultimo il traguardo.
 # Non usa main.tscn ne' la GridMap. Tasto R = ricomincia.
 
+const PAUSE_MENU := preload("res://scripts/pause_menu.gd")
 const MountainRoad := preload("res://scripts/mountain_road.gd")
 const VEHICLE_SCENE := preload("res://scenes/vehicle_selectable.tscn")
 const VIEW_SCRIPT := preload("res://scripts/view.gd")
@@ -67,6 +68,9 @@ var log_timer: float = 0.0
 
 
 func _ready() -> void:
+	var pause_menu := PAUSE_MENU.new()
+	pause_menu.name = "PauseMenu"
+	add_child(pause_menu)
 	bar_time.resize(DriftBar.SEGMENTS + 1)
 	_make_world()
 	road = MountainRoad.new()

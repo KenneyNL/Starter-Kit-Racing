@@ -1,6 +1,9 @@
 extends Control
 
 const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
+const GRAPHICS := preload("res://scripts/graphics_settings.gd")
+const UI_FONT := preload("res://assets/kenney_ui-pack-space-expansion/Font/Kenney Future Narrow.ttf")
+const LEADERBOARD_PATH := "user://mountain_leaderboards.cfg"
 
 @onready var main_menu: VBoxContainer = %MainMenu
 @onready var track_select_menu: VBoxContainer = %TrackSelectMenu
@@ -11,10 +14,24 @@ var car_select_menu: VBoxContainer
 @onready var now_playing_label: Label = %NowPlayingLabel
 
 var _is_transitioning: bool = false
+var _settings: Dictionary
+var _options_panel: Control
+var _leaderboard_panel: Control
 
 
 func _ready() -> void:
+	_settings = GRAPHICS.load_settings()
+	GRAPHICS.apply(_settings, get_viewport())
+	$Center.anchor_left = 0.0
+	$Center.anchor_right = 1.0
+	$Center.anchor_top = 0.49
+	$Center.anchor_bottom = 0.99
+	$Center.offset_left = 0.0
+	$Center.offset_right = 0.0
+	$Center.offset_top = 0.0
+	$Center.offset_bottom = 0.0
 	_build_car_select_menu()
+	_add_leaderboard_button()
 	_setup_now_playing()
 
 
@@ -129,4 +146,136 @@ func _on_back_pressed() -> void:
 
 
 func _on_option_pressed() -> void:
-	pass
+	main_menu.visible = false
+	_options_panel = _make_overlay("GRAPHICS OPTIONS")
+	var content := _options_panel.get_meta("content") as VBoxContainer
+	_add_choice(content, "RESOLUTION", ["1280 x 720", "1600 x 900", "1920 x 1080", "2560 x 1440"], "resolution")
+	_add_choice(content, "DETAIL / RENDER SCALE", ["LOW (65%)", "MEDIUM (85%)", "HIGH (100%)"], "detail")
+	_add_choice(content, "ANTI-ALIASING", ["OFF", "MSAA 2X", "MSAA 4X"], "antialiasing")
+	_add_choice(content, "DISPLAY MODE", ["WINDOWED", "FULLSCREEN"], "fullscreen")
+	_add_choice(content, "V-SYNC", ["OFF", "ON"], "vsync")
+	var back := _styled_button("SAVE & BACK")
+	back.pressed.connect(func() -> void:
+		var error := GRAPHICS.save_settings(_settings)
+		if error != OK:
+			push_warning("Unable to save graphics settings: %s" % error)
+		_options_panel.queue_free()
+		_options_panel = null
+		main_menu.visible = true
+		single_player_button.grab_focus()
+	)
+	content.add_child(back)
+
+
+func _add_leaderboard_button() -> void:
+	var button := _styled_button("LEADERBOARD")
+	main_menu.add_child(button)
+	main_menu.move_child(button, 1)
+	button.pressed.connect(_open_leaderboard)
+
+
+func _styled_button(label: String) -> Button:
+	var button := Button.new()
+	button.text = label
+	button.custom_minimum_size = Vector2(320, 64)
+	button.add_theme_font_size_override("font_size", 24)
+	for state in ["normal", "hover", "pressed", "focus"]:
+		button.add_theme_stylebox_override(state, circuit_button.get_theme_stylebox("hover" if state == "focus" else state))
+	for color in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
+		button.add_theme_color_override(color, Color.BLACK)
+	return button
+
+
+func _make_overlay(title: String) -> Control:
+	var overlay := Control.new()
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.05, 0.09, 0.93)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(540, 0)
+	scroll.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	center.add_child(scroll)
+	var content := VBoxContainer.new()
+	content.custom_minimum_size.x = 500
+	content.add_theme_constant_override("separation", 10)
+	scroll.add_child(content)
+	var heading := Label.new()
+	heading.text = title
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.add_theme_font_override("font", UI_FONT)
+	heading.add_theme_font_size_override("font_size", 38)
+	content.add_child(heading)
+	overlay.set_meta("content", content)
+	return overlay
+
+
+func _add_choice(parent: VBoxContainer, label_text: String, options: Array[String], key: String) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 20)
+	parent.add_child(row)
+	var label := Label.new()
+	label.text = label_text
+	label.custom_minimum_size.x = 260
+	label.add_theme_font_override("font", UI_FONT)
+	label.add_theme_font_size_override("font_size", 20)
+	row.add_child(label)
+	var choice := OptionButton.new()
+	choice.custom_minimum_size = Vector2(220, 42)
+	for option in options:
+		choice.add_item(option)
+	choice.select(int(_settings[key]) if key != "fullscreen" and key != "vsync" else (1 if _settings[key] else 0))
+	choice.item_selected.connect(func(index: int) -> void:
+		_settings[key] = (index == 1) if key == "fullscreen" or key == "vsync" else index
+		GRAPHICS.apply(_settings, get_viewport())
+	)
+	row.add_child(choice)
+
+
+func _open_leaderboard() -> void:
+	main_menu.visible = false
+	_leaderboard_panel = _make_overlay("LOCAL LEADERBOARDS")
+	var content := _leaderboard_panel.get_meta("content") as VBoxContainer
+	var cfg := ConfigFile.new()
+	var err := cfg.load(LEADERBOARD_PATH)
+	if err != OK and err != ERR_FILE_NOT_FOUND:
+		push_warning("Could not read leaderboards: %s" % err)
+	for track in ["mountain_500m", "mountain_night_500m"]:
+		var heading := Label.new()
+		heading.text = "MOUNTAIN DAY" if track == "mountain_500m" else "MOUNTAIN NIGHT"
+		heading.add_theme_font_override("font", UI_FONT)
+		heading.add_theme_font_size_override("font_size", 24)
+		content.add_child(heading)
+		var raw: Variant = cfg.get_value(track, "runs", [])
+		var runs: Array = raw if raw is Array else []
+		if runs.is_empty():
+			var empty := Label.new()
+			empty.text = "NO COMPLETED RUNS YET"
+			content.add_child(empty)
+		else:
+			for index in range(mini(runs.size(), 10)):
+				var run: Variant = runs[index]
+				if not run is Dictionary:
+					continue
+				var score := int(run.get("score", 0))
+				var seconds := float(run.get("time", 0.0))
+				var car := VEHICLE_CATALOG.get_label(str(run.get("car", "ae86")))
+				var line := Label.new()
+				line.text = "%02d  %-18s  %02d:%05.2f  %d PTS" % [index + 1, car, int(seconds / 60.0), fmod(seconds, 60.0), score]
+				line.add_theme_font_override("font", UI_FONT)
+				line.add_theme_font_size_override("font_size", 18)
+				content.add_child(line)
+	var back := _styled_button("BACK")
+	back.pressed.connect(func() -> void:
+		_leaderboard_panel.queue_free()
+		_leaderboard_panel = null
+		main_menu.visible = true
+		single_player_button.grab_focus()
+	)
+	content.add_child(back)
+

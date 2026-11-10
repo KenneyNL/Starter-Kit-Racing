@@ -18,7 +18,10 @@ size = Vector3(107, 0, 118)
 friction = 0.0
 bounce = 0.1
 
+[ext_resource type="Script" path="res://scripts/circuit_pause.gd" id="15_pause"]
+
 [node name="Main" type="Node3D" unique_id=1145999287]
+script = ExtResource("15_pause")
 
 [node name="Environment" type="WorldEnvironment" parent="." unique_id=1097254880]
 environment = ExtResource("1_q4t1r")

@@ -21,7 +21,13 @@
 2. Clone the repository and open `project.godot`.
 3. Press F5. The boot scene is `scenes/menu.tscn`.
 
-From the menu: **Single Player**, choose a car, then choose a track. **Option** is still a placeholder.
+From the menu: **Single Player**, choose a car, then choose a track. **Options** includes locally saved display and graphics preferences. The **Leaderboard** button shows the top ten saved runs for each mountain track.
+
+## Graphics options and pause
+
+The main menu provides windowed resolution, fullscreen mode, render scale (Low 65%, Medium 85%, High 100%), MSAA and VSync. Settings are stored locally in `user://graphics_settings.cfg` and applied when the menu opens or values change. In fullscreen, the operating system controls the actual display resolution.
+
+During a race, press **Esc** to freeze the scene and open **Resume**, **Restart**, or **Main Menu**. Circuit has a pause overlay too, even though it currently has no finish line or leaderboard.
 
 ## Controls
 
@@ -33,7 +39,7 @@ Keyboard, arrow keys, and a gamepad (left stick and triggers).
 | <kbd>S</kbd> / <kbd>↓</kbd> / left trigger | Brake and reverse |
 | <kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd> / left stick | Steer |
 | <kbd>R</kbd> | Restart the descent. On the results screen: **Retry** |
-| <kbd>Esc</kbd> | From the results screen, return to the menu |
+| <kbd>Esc</kbd> | During play: pause/resume. On results: return to menu |
 
 Hold the throttle and steer into a bend to start a drift. Keep steering to hold the slide and release steering to straighten the car. The steering assist eases speed in tighter turns. Use the brake for slower entries.
 
