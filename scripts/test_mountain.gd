@@ -143,7 +143,7 @@ func _spawn_crowd(node_name: String, anchor: Transform3D, crowd_count: int, seed
 	specs.forward_max = forward_max
 	specs.rng_seed = seed
 	add_child(specs)
-	specs.spawn(anchor.origin, road_dir, road_side)
+	specs.spawn(anchor.origin, road_dir, road_side, road.finish_transform.origin)
 
 
 func _make_vehicle_and_camera() -> void:
