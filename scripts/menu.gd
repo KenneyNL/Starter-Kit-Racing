@@ -3,6 +3,8 @@ extends Control
 const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
 const GRAPHICS := preload("res://scripts/graphics_settings.gd")
 const UI_FONT := preload("res://assets/kenney_ui-pack-space-expansion/Font/Kenney Future Narrow.ttf")
+const CIRCUIT_RECORDS := preload("res://scripts/circuit_records.gd")
+const PROGRESSION := preload("res://scripts/progression.gd")
 const LEADERBOARD_PATH := "user://mountain_leaderboards.cfg"
 
 @onready var main_menu: VBoxContainer = %MainMenu
@@ -22,6 +24,7 @@ var _leaderboard_panel: Control
 func _ready() -> void:
 	_settings = GRAPHICS.load_settings()
 	GRAPHICS.apply(_settings, get_viewport())
+	GRAPHICS.apply_world(_settings, get_tree().root)
 	$Center.anchor_left = 0.0
 	$Center.anchor_right = 1.0
 	$Center.anchor_top = 0.49
@@ -154,6 +157,12 @@ func _on_option_pressed() -> void:
 	_add_choice(content, "ANTI-ALIASING", ["OFF", "MSAA 2X", "MSAA 4X"], "antialiasing")
 	_add_choice(content, "DISPLAY MODE", ["WINDOWED", "FULLSCREEN"], "fullscreen")
 	_add_choice(content, "V-SYNC", ["OFF", "ON"], "vsync")
+	_add_choice(content, "GHOST CAR", ["OFF", "ON"], "ghost")
+	_add_choice(content, "SHADOWS", ["OFF", "ON", "HIGH"], "shadows")
+	_add_choice(content, "SSAO", ["OFF", "ON"], "ssao")
+	_add_choice(content, "VEGETATION", ["LOW", "MEDIUM", "HIGH"], "vegetation")
+	_add_choice(content, "MUSIC VOLUME", ["0%", "25%", "50%", "75%", "100%"], "music_volume")
+	_add_choice(content, "EFFECTS VOLUME", ["0%", "25%", "50%", "75%", "100%"], "effects_volume")
 	var back := _styled_button("SAVE & BACK")
 	back.pressed.connect(func() -> void:
 		var error := GRAPHICS.save_settings(_settings)
@@ -230,10 +239,11 @@ func _add_choice(parent: VBoxContainer, label_text: String, options: Array[Strin
 	choice.custom_minimum_size = Vector2(220, 42)
 	for option in options:
 		choice.add_item(option)
-	choice.select(int(_settings[key]) if key != "fullscreen" and key != "vsync" else (1 if _settings[key] else 0))
+	choice.select(int(round(float(_settings[key]) / 25.0)) if key.ends_with("_volume") else (1 if bool(_settings[key]) else 0) if key in ["fullscreen", "vsync", "ghost", "ssao"] else int(_settings[key]))
 	choice.item_selected.connect(func(index: int) -> void:
-		_settings[key] = (index == 1) if key == "fullscreen" or key == "vsync" else index
+		_settings[key] = (index * 25) if key.ends_with("_volume") else (index == 1) if key in ["fullscreen", "vsync", "ghost", "ssao"] else index
 		GRAPHICS.apply(_settings, get_viewport())
+		GRAPHICS.apply_world(_settings, get_tree().root)
 	)
 	row.add_child(choice)
 
@@ -246,6 +256,19 @@ func _open_leaderboard() -> void:
 	var err := cfg.load(LEADERBOARD_PATH)
 	if err != OK and err != ERR_FILE_NOT_FOUND:
 		push_warning("Could not read leaderboards: %s" % err)
+	var circuit_title := Label.new()
+	circuit_title.text = "CIRCUIT - 3 LAPS"
+	content.add_child(circuit_title)
+	var circuit_runs := CIRCUIT_RECORDS.top()
+	for i in circuit_runs.size():
+		var run: Dictionary = circuit_runs[i]
+		var line := Label.new()
+		line.text = "%02d  %s  %.2f s" % [i + 1, str(run.get("car", "?")), float(run.get("time", 0.0))]
+		content.add_child(line)
+	if circuit_runs.is_empty():
+		var empty_circuit := Label.new()
+		empty_circuit.text = "NO CIRCUIT RECORDS YET"
+		content.add_child(empty_circuit)
 	for track in ["mountain_500m", "mountain_night_500m"]:
 		var heading := Label.new()
 		heading.text = "MOUNTAIN DAY" if track == "mountain_500m" else "MOUNTAIN NIGHT"
