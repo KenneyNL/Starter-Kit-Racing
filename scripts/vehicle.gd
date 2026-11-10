@@ -52,6 +52,8 @@ var current_steer_angle: float = 0.0
 @export var speed_multiplier: float = 1.0
 ## Secondi per passare dallo sterzo neutro al massimo. Zero = risposta diretta.
 @export_range(0.0, 1.0, 0.01) var steering_ramp_time: float = 0.0
+## Progressive slip and contact recovery for the mountain passes.
+@export var mountain_handling: bool = false
 
 @export_group("Skid marks")
 ## Lascia sull'asfalto i segni delle gomme posteriori durante il drift.
@@ -75,6 +77,7 @@ var _body_probes_ready: bool = false
 var acceleration: float
 var _steering_rate: float
 var _drift_yaw: float
+var _mountain_drive_direction := 1.0
 var linear_speed: float
 
 var colliding: bool
@@ -116,19 +119,19 @@ func _store_wheel_base_rotations():
 
 func _physics_process(delta: float) -> void:
 	collision_lockout = maxf(collision_lockout - delta, 0.0)
-	var contact := _sphere_hits_obstacle()
-	if body_collision and _resolve_body_overlap():
-		contact = true
+	var state := PhysicsServer3D.body_get_direct_state(sphere.get_rid())
+	var wall_normal := _resolve_body_overlap() if body_collision else Vector3.ZERO
+	var contact := wall_normal != Vector3.ZERO or _sphere_hits_obstacle(state)
 	if contact:
 		_register_collision()
 
-	colliding = raycast.is_colliding()
+	if mountain_handling:
+		raycast.position = sphere.position
+		raycast.force_raycast_update()
+	var ground_normal := _ground_normal(state)
+	colliding = ground_normal.y > 0.6
 	if colliding:
-		var ground_normal := raycast.get_collision_normal()
-		if ground_normal.y > 0.6:
-			_drive_on_ground(delta, ground_normal)
-		else:
-			colliding = false
+		_drive_on_ground(delta, ground_normal, wall_normal, contact)
 
 	vehicle_model.position = sphere.position - Vector3(0, 0.65, 0)
 	raycast.position = sphere.position
@@ -140,7 +143,7 @@ func _physics_process(delta: float) -> void:
 	effect_trails()
 
 
-func _drive_on_ground(delta: float, normal: Vector3) -> void:
+func _drive_on_ground(delta: float, normal: Vector3, wall_normal: Vector3, obstacle_contact: bool) -> void:
 	input.x = _read_steering(delta)
 	input.z = Input.get_axis("back", "forward")
 
@@ -152,6 +155,14 @@ func _drive_on_ground(delta: float, normal: Vector3) -> void:
 	var direction := -1.0 if velocity.dot(forward) < -0.15 else 1.0
 	var steering_grip := smoothstep(0.2, 3.0, speed)
 	var steering_rate := lerpf(2.35, 1.48, smoothstep(3.0, 16.0, speed))
+	if mountain_handling:
+		# Rebounding off a rail must not reverse the player's steering direction.
+		if speed < 0.65 and absf(input.z) > 0.05:
+			_mountain_drive_direction = signf(input.z)
+		direction = _mountain_drive_direction
+		steering_grip = smoothstep(0.15, 2.0, speed)
+		if collision_lockout > 0.0 and absf(input.z) > 0.05:
+			steering_grip = maxf(steering_grip, 0.7)
 	var target_rate := -input.x * direction * steering_grip * steering_rate
 	_steering_rate = lerpf(_steering_rate, target_rate, 1.0 - exp(-13.0 * delta))
 	forward = forward.rotated(normal, _steering_rate * steering_grip * delta)
@@ -166,23 +177,55 @@ func _drive_on_ground(delta: float, normal: Vector3) -> void:
 	var accel := 8.5 if absf(input.z) > 0.05 else 4.2
 	if opposing_throttle:
 		accel = 17.0
-	var drive_speed := move_toward(velocity.dot(forward), target_speed, accel * delta)
+	var along_speed := velocity.dot(forward)
+	var drive_speed := along_speed
+	if mountain_handling and along_speed * direction < 0.0:
+		drive_speed = 0.0
+	drive_speed = move_toward(drive_speed, target_speed, accel * delta)
 	var next_velocity := velocity.move_toward(forward * drive_speed, 40.0 * delta)
+	if mountain_handling:
+		# Let lateral momentum carry the car through the corner. Grip fades
+		# as the slide develops and returns when the car straightens.
+		var slip := smoothstep(0.0, deg_to_rad(48.0), absf(_drift_yaw))
+		var lateral_grip := lerpf(26.0, 17.0, slip)
+		var lateral := velocity - forward * along_speed
+		next_velocity = forward * drive_speed + lateral * exp(-lateral_grip * delta)
+		if next_velocity.dot(wall_normal) < 0.0:
+			next_velocity = next_velocity.slide(wall_normal)
 	sphere.linear_velocity = next_velocity + normal * minf(sphere.linear_velocity.dot(normal), 0.0)
 	sphere.angular_velocity = normal.cross(next_velocity) / 0.5
 
+	_update_drift_yaw(delta, speed, direction, obstacle_contact)
+	var body_forward := forward.rotated(normal, _drift_yaw)
+	vehicle_model.global_basis = Basis(normal.cross(body_forward), normal, body_forward)
+	linear_speed = clampf(next_velocity.dot(forward) / top_speed, -1.0, 1.0)
+	acceleration = lerpf(acceleration, linear_speed, 1.0 - exp(-5.0 * delta))
+
+func _update_drift_yaw(delta: float, speed: float, direction: float, obstacle_contact: bool) -> void:
 	var target_yaw := 0.0
+	var yaw_response := 9.0 if absf(input.x) > 0.13 else 4.5
+	if mountain_handling:
+		# Slip builds with cornering speed and throttle. Let it unwind gradually
+		# through a correction or a scrape, independently of the scoring lockout.
+		if direction > 0.0 and not obstacle_contact:
+			var speed_factor := smoothstep(3.5, 11.8, speed)
+			var turn_factor := smoothstep(0.12, 0.9, absf(input.x))
+			var throttle_factor := lerpf(0.62, 1.0, maxf(input.z, 0.0))
+			target_yaw = -signf(input.x) * deg_to_rad(48.0) * speed_factor * turn_factor * throttle_factor
+		yaw_response = 4.8 if absf(target_yaw) > absf(_drift_yaw) else 2.8
+		if obstacle_contact:
+			yaw_response = 5.5
+		var next_yaw := lerpf(_drift_yaw, target_yaw, 1.0 - exp(-yaw_response * delta))
+		_drift_yaw = move_toward(_drift_yaw, next_yaw, deg_to_rad(105.0) * delta)
+		return
+
 	if direction > 0.0 and collision_lockout <= 0.0:
 		var speed_factor := smoothstep(2.5, 8.0, speed)
 		var turn_factor := smoothstep(0.13, 0.84, absf(input.x))
 		var throttle_factor := lerpf(0.67, 1.0, maxf(input.z, 0.0))
 		target_yaw = -signf(input.x) * deg_to_rad(46.0) * speed_factor * turn_factor * throttle_factor
-	var yaw_response := 9.0 if absf(input.x) > 0.13 else 4.5
 	_drift_yaw = lerpf(_drift_yaw, target_yaw, 1.0 - exp(-yaw_response * delta))
-	var body_forward := forward.rotated(normal, _drift_yaw)
-	vehicle_model.global_basis = Basis(normal.cross(body_forward), normal, body_forward)
-	linear_speed = clampf(next_velocity.dot(forward) / top_speed, -1.0, 1.0)
-	acceleration = lerpf(acceleration, linear_speed, 1.0 - exp(-5.0 * delta))
+
 
 func _read_steering(delta: float) -> float:
 	var target := Input.get_axis("left", "right")
@@ -228,11 +271,11 @@ func _compute_body_probes():
 			Vector3(minp.x, 0, 0), Vector3(maxp.x, 0, 0)]:
 		_body_probes.append(p)
 
-func _resolve_body_overlap() -> bool:
+func _resolve_body_overlap() -> Vector3:
 	if !_body_probes_ready:
 		_compute_body_probes()
 	if _body_probes.is_empty():
-		return false
+		return Vector3.ZERO
 
 	var space := get_world_3d().direct_space_state
 	var center := sphere.global_position
@@ -256,16 +299,30 @@ func _resolve_body_overlap() -> bool:
 			worst_normal = n
 
 	if worst_depth <= 0.0:
-		return false
+		return Vector3.ZERO
 	sphere.global_position += worst_normal * (worst_depth + body_collision_margin)
 	var into_wall := sphere.linear_velocity.dot(worst_normal)
 	if into_wall < 0.0:
 		sphere.linear_velocity -= worst_normal * into_wall
-	return true
+	return worst_normal
 
 
-func _sphere_hits_obstacle() -> bool:
-	var state := PhysicsServer3D.body_get_direct_state(sphere.get_rid())
+func _ground_normal(state: PhysicsDirectBodyState3D) -> Vector3:
+	if raycast.is_colliding():
+		var normal := raycast.get_collision_normal()
+		if normal.y > 0.6:
+			return normal
+	# At the edge of a rail, the sphere can still be on asphalt when the
+	# center ray hits the wall. Use the supporting contact in that case.
+	if mountain_handling and state != null:
+		for i in state.get_contact_count():
+			var normal := state.get_contact_local_normal(i)
+			if normal.y > 0.6:
+				return normal
+	return Vector3.ZERO
+
+
+func _sphere_hits_obstacle(state: PhysicsDirectBodyState3D) -> bool:
 	if state == null:
 		return false
 	for i in state.get_contact_count():

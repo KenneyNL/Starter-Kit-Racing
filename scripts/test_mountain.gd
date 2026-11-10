@@ -16,7 +16,7 @@ const NOW_PLAYING_BANNER := preload("res://scenes/now_playing_banner.tscn")
 ## Velocita' del veicolo su questa mappa (1.0 = quella delle mappe a tile).
 @export var speed_multiplier: float = 1.5
 ## Ingresso progressivo nello sterzo per facilitare le correzioni sui curvoni.
-@export_range(0.0, 1.0, 0.01) var steering_ramp_time: float = 0.24
+@export_range(0.0, 1.0, 0.01) var steering_ramp_time: float = 0.14
 ## Fa collidere con muri e alberi anche cofano e coda dell'auto (non solo la sfera di fisica).
 @export var body_collision: bool = true
 ## Distanza dalla partenza (metri lungo la strada) a cui parte l'auto.
@@ -138,6 +138,7 @@ func _make_vehicle_and_camera() -> void:
 	vehicle = VEHICLE_SCENE.instantiate()
 	vehicle.speed_multiplier = speed_multiplier
 	vehicle.steering_ramp_time = steering_ramp_time
+	vehicle.mountain_handling = true
 	vehicle.body_collision = body_collision
 	vehicle.process_physics_priority = -1
 	vehicle.obstacle_hit.connect(_on_obstacle_hit)
@@ -165,7 +166,7 @@ func _make_vehicle_and_camera() -> void:
 	view.set_script(VIEW_SCRIPT)
 	view.set("target", vehicle)
 	view.set("road_path", path)
-	view.rotation_degrees.x = -35.0
+	view.rotation_degrees = Vector3(-35.0, 45.0, 0.0)
 	view.position = vehicle.position
 	var cam := Camera3D.new()
 	cam.name = "Camera"
