@@ -75,6 +75,7 @@ func _select_vehicle(vehicle_id: String) -> void:
 		return
 	car_select_menu.visible = false
 	track_select_menu.visible = true
+	track_select_menu.mouse_filter = Control.MOUSE_FILTER_PASS
 	circuit_button.grab_focus()
 
 
@@ -140,7 +141,11 @@ func _start_track(scene_path: String) -> void:
 		tween.tween_property(bgm, "volume_db", -80.0, 0.8).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		await tween.finished
 
-	get_tree().change_scene_to_file(scene_path)
+	var error := get_tree().change_scene_to_file(scene_path)
+	if error != OK:
+		push_error("Could not load track %s: %d" % [scene_path, error])
+		_is_transitioning = false
+		mouse_filter = Control.MOUSE_FILTER_PASS
 
 
 func _on_back_pressed() -> void:
