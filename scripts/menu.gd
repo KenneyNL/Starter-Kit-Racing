@@ -19,9 +19,12 @@ var _is_transitioning: bool = false
 var _settings: Dictionary
 var _options_panel: Control
 var _leaderboard_panel: Control
+var _rebind_action := ""
+var _rebind_button: Button
 
 
 func _ready() -> void:
+	_load_controls()
 	_settings = GRAPHICS.load_settings()
 	GRAPHICS.apply(_settings, get_viewport())
 	GRAPHICS.apply_world(_settings, get_tree().root)
@@ -163,11 +166,16 @@ func _on_option_pressed() -> void:
 	_add_choice(content, "VEGETATION", ["LOW", "MEDIUM", "HIGH"], "vegetation")
 	_add_choice(content, "MUSIC VOLUME", ["0%", "25%", "50%", "75%", "100%"], "music_volume")
 	_add_choice(content, "EFFECTS VOLUME", ["0%", "25%", "50%", "75%", "100%"], "effects_volume")
+	for action in ["forward", "back", "left", "right", "bounce"]:
+		var bind_button := _styled_button("REMAP " + action.to_upper())
+		bind_button.pressed.connect(_start_rebind.bind(action, bind_button))
+		content.add_child(bind_button)
 	var back := _styled_button("SAVE & BACK")
 	back.pressed.connect(func() -> void:
 		var error := GRAPHICS.save_settings(_settings)
 		if error != OK:
 			push_warning("Unable to save graphics settings: %s" % error)
+		_rebind_action = ""
 		_options_panel.queue_free()
 		_options_panel = null
 		main_menu.visible = true
@@ -303,3 +311,47 @@ func _open_leaderboard() -> void:
 	)
 	content.add_child(back)
 
+
+func _start_rebind(action: String, button: Button) -> void:
+	_rebind_action = action
+	_rebind_button = button
+	button.text = "PRESS A KEY FOR " + action.to_upper()
+
+func _input(event: InputEvent) -> void:
+	if _rebind_action.is_empty():
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE:
+			_rebind_action = ""
+			_rebind_button.text = "REMAP CANCELLED"
+			get_viewport().set_input_as_handled()
+			return
+		var mapped := InputEventKey.new()
+		mapped.physical_keycode = event.physical_keycode
+		var events := InputMap.action_get_events(_rebind_action)
+		for old in events:
+			if old is InputEventKey:
+				InputMap.action_erase_event(_rebind_action, old)
+		InputMap.action_add_event(_rebind_action, mapped)
+		var cfg := ConfigFile.new()
+		cfg.load("user://controls.cfg")
+		cfg.set_value("keys", _rebind_action, event.physical_keycode)
+		cfg.save("user://controls.cfg")
+		_rebind_button.text = "REMAP " + _rebind_action.to_upper() + ": " + event.as_text()
+		_rebind_action = ""
+		get_viewport().set_input_as_handled()
+
+func _load_controls() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load("user://controls.cfg") != OK:
+		return
+	for action in ["forward", "back", "left", "right", "bounce"]:
+		var code := int(cfg.get_value("keys", action, 0))
+		if code == 0:
+			continue
+		for old in InputMap.action_get_events(action):
+			if old is InputEventKey:
+				InputMap.action_erase_event(action, old)
+		var mapped := InputEventKey.new()
+		mapped.physical_keycode = code
+		InputMap.action_add_event(action, mapped)
