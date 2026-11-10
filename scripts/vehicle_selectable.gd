@@ -5,9 +5,9 @@ const VEHICLE_CATALOG := preload("res://scripts/vehicle_catalog.gd")
 const AE86_SCENE: PackedScene = preload("res://models/vehicle-toyota-ae86.glb")
 const RX7_SCENE: PackedScene = preload("res://models/vehicle-toyota-mazdarx7.glb")
 
-## The RX-7 source uses a different export scale; normalize its longest horizontal
-## dimension to a plausible road-car length rather than relying on importer defaults.
-const RX7_TARGET_LENGTH := 4.15
+const AE86_MODEL_SCALE := 0.346
+## Length of the imported AE86 mesh before applying its in-game scale.
+const AE86_IMPORTED_LENGTH := 9.305
 
 var selected_vehicle_id: String = "ae86"
 var _rx7_front_wheels: Array[Node3D] = []
@@ -40,7 +40,7 @@ func _load_selected_model() -> void:
 		_configure_rx7_nodes(model_instance)
 	else:
 		# Preserve the existing AE86 import scale and exact wheel/body bindings.
-		model_instance.scale = Vector3.ONE * 0.346
+		model_instance.scale = Vector3.ONE * AE86_MODEL_SCALE
 		vehicle_body = model_instance.get_node_or_null("body")
 		wheel_fl = model_instance.get_node_or_null("RootNode/Car/Wheel1")
 		wheel_fr = model_instance.get_node_or_null("RootNode/Car/Wheel3")
@@ -53,10 +53,11 @@ func _fit_rx7_model(model_instance: Node3D) -> void:
 	var horizontal_length := maxf(bounds.size.x, bounds.size.z)
 	if horizontal_length <= 0.001:
 		push_warning("VehicleSelectable: could not measure RX-7 mesh bounds; using fallback scale.")
-		model_instance.scale = Vector3.ONE * 0.346
+		model_instance.scale = Vector3.ONE * AE86_MODEL_SCALE
 		return
 
-	var scale_factor := RX7_TARGET_LENGTH / horizontal_length
+	# Match the AE86's on-track length with a uniform scale.
+	var scale_factor := AE86_IMPORTED_LENGTH * AE86_MODEL_SCALE / horizontal_length
 	var center := bounds.position + bounds.size * 0.5
 	model_instance.scale = Vector3.ONE * scale_factor
 	# Center the car over the physics body without changing its imported vertical origin.
