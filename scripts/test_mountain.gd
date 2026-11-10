@@ -81,7 +81,15 @@ func _ready() -> void:
 	add_child(road)
 	road.enable_vegetation = enable_vegetation
 	var settings := GRAPHICS.load_settings()
-	var vegetation_multiplier := [0.35, 0.7, 1.0][int(settings.get("vegetation", 2))]
+	var vegetation_level: int = clampi(int(settings.get("vegetation", 2)), 0, 2)
+	var vegetation_multiplier: float = 1.0
+	match vegetation_level:
+		0:
+			vegetation_multiplier = 0.35
+		1:
+			vegetation_multiplier = 0.70
+		_:
+			vegetation_multiplier = 1.0
 	road.tree_density = tree_density * vegetation_multiplier
 	road.min_tree_road_distance = min_tree_road_distance
 	road.min_tree_spacing = min_tree_spacing
